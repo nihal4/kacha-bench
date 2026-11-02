@@ -50,7 +50,7 @@ Exact mud and water physics (MPM/DEM particle simulation) is far too slow for RL
 - **Mud:** soft contact settings plus extra forces for sinkage, bulldozing resistance and lift-off suction.
 - **Water:** drag, buoyancy and reduced friction inside water regions, with pothole depth hidden below the surface.
 
-Parameter ranges will be taken from published soil-mechanics and terramechanics measurements, randomised over realistic ranges, and checked against at least one reference (published sinkage curves or an offline high-fidelity simulation). These are approximations, and the paper will say so.
+The mud model is built from classical soil mechanics: mud strength comes from soil moisture (liquidity index), and strength sets the bearing, sideways and suction forces on each foot, using measured properties of Bangladeshi clays. Full derivation, sources, verification and limitations: [`docs/mud_physics.md`](docs/mud_physics.md). These are approximations, and the paper will say so.
 
 ## Planned benchmark design
 
@@ -78,11 +78,17 @@ The same terrain code runs in standard MuJoCo (CPU) and MJX (GPU).
 kacha-bench/
 ├── kacha/                 # Python package
 │   ├── terrain.py         # Height-field generators (road, ruts, potholes, embankment)
-│   └── scene.py           # Builds a MuJoCo model from a generated terrain
+│   ├── scene.py           # Builds a MuJoCo model from a generated terrain
+│   ├── robot_scene.py     # Puts a Menagerie robot (Go1) on the terrain, with optional mud layer
+│   └── mud.py             # Wet-clay mud model (soil mechanics) and its MuJoCo coupling
 ├── scripts/
-│   └── smoke_test.py      # Builds a terrain, drops a test body, checks the simulation runs
+│   ├── smoke_test.py      # Builds a terrain, drops a test body, checks the simulation runs
+│   ├── go1_on_road.py     # Go1 standing on the road or in mud for a season, renders a video
+│   └── mud_probe.py       # Foot-drop probe test: mud forces vs the equations, plus figure
 ├── docs/
-│   └── related_work.md    # Literature notes and positioning
+│   ├── related_work.md    # Literature notes and positioning
+│   ├── mud_physics.md     # Mud model: equations, sources, verification, limitations
+│   └── figures/           # Generated figures
 ├── requirements.txt
 └── pyproject.toml
 ```
@@ -102,7 +108,9 @@ python scripts/smoke_test.py --view     # opens the MuJoCo viewer
 - [x] Repository and project description
 - [x] Prototype height-field generator (road, ruts, potholes, embankment)
 - [x] Go1 standing on the village road (`scripts/go1_on_road.py`, renders a video headless with `MUJOCO_GL=egl`)
-- [ ] Mud contact model (sinkage, slip, suction)
+- [x] Mud contact model (sinkage, sideways resistance, suction) from soil mechanics, verified against its equations (`scripts/mud_probe.py`)
+- [x] Go1 standing in mud for each season (`scripts/go1_on_road.py --season peak_monsoon`)
+- [ ] Validate the mud model against measured Go1 foot-force data (Godon et al. 2025)
 - [ ] Water regions with hidden pothole depth
 - [ ] Brick road and bamboo bridge elements
 - [ ] Seasonal parameter sets and difficulty levels

@@ -3,6 +3,7 @@ mujoco-menagerie
 numpy
 imageio
 imageio-ffmpeg
+matplotlib
 # GPU training on Kaggle (optional):
 # mujoco-mjx
 # jax[cuda12]

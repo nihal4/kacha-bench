@@ -10,7 +10,7 @@ readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "S. M. Nihal Ahmed" }]
 requires-python = ">=3.10"
-dependencies = ["mujoco>=3.2", "mujoco-menagerie", "numpy", "imageio", "imageio-ffmpeg"]
+dependencies = ["mujoco>=3.2", "mujoco-menagerie", "numpy", "imageio", "imageio-ffmpeg", "matplotlib"]
 
 [project.optional-dependencies]
 mjx = ["mujoco-mjx", "jax"]
