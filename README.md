@@ -101,6 +101,7 @@ python scripts/smoke_test.py --view     # opens the MuJoCo viewer
 
 - [x] Repository and project description
 - [x] Prototype height-field generator (road, ruts, potholes, embankment)
+- [x] Go1 standing on the village road (`scripts/go1_on_road.py`, renders a video headless with `MUJOCO_GL=egl`)
 - [ ] Mud contact model (sinkage, slip, suction)
 - [ ] Water regions with hidden pothole depth
 - [ ] Brick road and bamboo bridge elements

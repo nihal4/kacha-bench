@@ -1,5 +1,8 @@
 mujoco>=3.2
+mujoco-menagerie
 numpy
+imageio
+imageio-ffmpeg
 # GPU training on Kaggle (optional):
 # mujoco-mjx
 # jax[cuda12]
