@@ -33,6 +33,11 @@ Reward (each term multiplied by the 0.02 s control step), Playground scales:
 | ang_vel_xy | -0.05 | feet_slip | -0.1 |
 | orientation | -5.0 | | |
 
+As in Playground, the summed step reward (times the control step) is **clipped at zero**
+(legged_gym calls this "only positive rewards"). Without the clip, a first learning check
+drifted to standing still: with exploration noise, the energy and torque penalties per
+step outweighed the tracking reward, so moving less was the easiest way to score more.
+
 Not used: Playground's foot-clearance and foot-height terms, and lateral and yaw commands.
 
 **Success ("walked")**: the episode ends without a fall AND the robot reached the end of

@@ -171,7 +171,9 @@ class Go1WalkEnv(gym.Env):
             action_rate=float(np.sum((a - self.last_action) ** 2)),
             energy=float(np.sum(np.abs(qd * tau))),
             feet_slip=slip, feet_air_time=air_rew)
-        reward = self.dt * sum(WEIGHTS[k] * terms[k] for k in WEIGHTS)
+        # Playground (and legged_gym "only positive rewards"): the summed step reward is
+        # clipped at zero, so early noisy movement is not punished below standing still
+        reward = float(np.clip(self.dt * sum(WEIGHTS[k] * terms[k] for k in WEIGHTS), 0.0, 1e4))
         self.last_action = a
         reached = d.qpos[0] > self.cfg.length / 2 - 0.5
         terminated = bool(fell)
