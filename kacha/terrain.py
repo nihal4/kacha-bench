@@ -22,7 +22,7 @@ POTHOLE_CLASSES = {
 class RoadConfig:
     length: float = 10.0          # metres along the road (x)
     width: float = 6.0            # metres across the whole patch (y)
-    resolution: float = 0.025     # metres per cell
+    resolution: float = 0.04      # metres per cell (smallest LGED pothole, 15 cm, spans ~4 cells)
     road_width: float = 3.0       # LGED smallest rural-road carriageway (design type 8)
     embankment_height: float = 0.3  # road surface above the surrounding ground
     ditch_depth: float = 0.2      # extra depth of the ditches beside the road
@@ -30,7 +30,8 @@ class RoadConfig:
     rut_spacing: float = 1.0      # distance between the two wheel ruts
     n_potholes: int = 4
     pothole_mix: tuple = (0.4, 0.4, 0.2)   # share of minor, moderate, severe
-    roughness: float = 0.01       # small random bumps on the surface
+    roughness: float = 0.01       # std of small surface bumps (m)
+    roughness_scale: float = 0.10 # bump size (m): Gaussian correlation length
 
 
 def _grid(cfg):
@@ -87,6 +88,17 @@ def add_potholes(h, X, Y, cfg, rng):
     return h, holes
 
 
+def smooth_noise(shape, sigma_cells, rng):
+    """Spatially correlated noise (unit std): white noise blurred by a Gaussian."""
+    n = rng.normal(0.0, 1.0, shape)
+    r = max(int(3 * sigma_cells), 1)
+    k = np.exp(-0.5 * (np.arange(-r, r + 1) / max(sigma_cells, 1e-6)) ** 2)
+    k /= k.sum()
+    n = np.apply_along_axis(lambda v: np.convolve(v, k, mode="same"), 0, n)
+    n = np.apply_along_axis(lambda v: np.convolve(v, k, mode="same"), 1, n)
+    return n / (n.std() + 1e-12)
+
+
 def generate_village_road(cfg=None, seed=0):
     """Generate a village-road height field.
 
@@ -100,5 +112,7 @@ def generate_village_road(cfg=None, seed=0):
     on_road = np.abs(Y) <= cfg.road_width / 2
     h = np.where(on_road, add_ruts(h.copy(), Y, cfg), h)
     h, holes = add_potholes(h, X, Y, cfg, rng)
-    h += rng.normal(0, cfg.roughness, h.shape)
+    # surface roughness correlated over ~10 cm (cell-by-cell noise makes tiny spikes,
+    # which look wrong and create many contacts per foot)
+    h += cfg.roughness * smooth_noise(h.shape, cfg.roughness_scale / cfg.resolution, rng)
     return h, X, Y, {"potholes": holes, "config": cfg}

@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# Control the KachaBench training PC.   kacha help
+ROOT="$HOME/kacha"
+REPO="$ROOT/repo"
+JOB="$ROOT/job.env"
+PY="$ROOT/.venv/bin/python"
+U="systemctl --user"
+IP() { hostname -I | awk '{print $1}'; }
+cur() { [ -f "$JOB" ] && source "$JOB"; }
+
+case "${1:-help}" in
+  job)
+    if [ -z "${2:-}" ]; then cur; echo "season=$SEASON  steps=$STEPS  extra='$EXTRA'  run=$NAME"; exit 0; fi
+    SEASON="$2"; STEPS="${3:-20000000}"; EXTRA="${4:-}"
+    case "$SEASON" in none|dry|early_monsoon|peak_monsoon|extreme|mix) ;;
+      *) echo "unknown season '$SEASON' (none, dry, early_monsoon, peak_monsoon, extreme, mix)"; exit 1 ;; esac
+    NAME="go1-$SEASON"
+    case "$EXTRA" in *--scan*) NAME="$NAME-scan" ;; esac
+    SEED=$(echo "$EXTRA" | grep -oE -- '--seed [0-9]+' | awk '{print $2}'); NAME="$NAME-s${SEED:-0}"
+    printf 'SEASON=%s\nSTEPS=%s\nEXTRA="%s"\nNAME=%s\n' "$SEASON" "$STEPS" "$EXTRA" "$NAME" > "$JOB"
+    echo "job set: $SEASON, $STEPS steps, extra='$EXTRA' -> runs/$NAME  (kacha restart to switch now)" ;;
+  start)   $U start kacha-train && echo "started: $("$0" job)" ;;
+  stop)    $U stop kacha-train && echo "stopped (checkpoint kept; kacha start resumes)" ;;
+  restart) $U restart kacha-train && echo "restarted: $("$0" job)" ;;
+  log)     cur; tail -n "${2:-40}" -f "$ROOT/logs/$NAME.log" ;;
+  status)
+    cur
+    echo "job:      $SEASON -> runs/$NAME   (service: $($U is-active kacha-train))"
+    grep -a -E "^\[progress\]" "$ROOT/logs/$NAME.log" 2>/dev/null | tail -1
+    grep -a -E "^Eval num|^Success rate" "$ROOT/logs/$NAME.log" 2>/dev/null | tail -2
+    grep -a "fps" "$ROOT/logs/$NAME.log" 2>/dev/null | tail -1 | tr -s ' ' | sed 's/|//g; s/^/speed:   /'
+    T=$(sensors 2>/dev/null | grep -m1 -E "Package id 0|Tctl" | awk '{print $4}'); echo "CPU temp: ${T:-n/a}   RAM free: $(free -h | awk '/Mem/{print $7}')"
+    echo "dashboard: http://$(IP):8081" ;;
+  video)
+    # film the best policy now (all three test roads)
+    cur; R="${2:-$NAME}"; D="$ROOT/runs/$R"; [ -f "$D/best_model.zip" ] || { echo "no best model in $D yet"; exit 1; }
+    mkdir -p "$D/progress"; O="$D/progress/best_$(date +%Y%m%d-%H%M).mp4"
+    cd "$REPO" && MUJOCO_GL=egl nice -n 15 "$PY" scripts/record.py --run "$D" --best --out "$O" \
+      && echo "watch: http://$(IP):8081/runs/$R/progress/$(basename "$O")" ;;
+  export)
+    cur; R="${2:-$NAME}"; D="$ROOT/runs/$R"; [ -d "$D" ] || { echo "no run $R"; exit 1; }
+    mkdir -p "$ROOT/exports"; Z="$ROOT/exports/${R}_$(date +%Y%m%d-%H%M).zip"
+    tail -n 400 "$ROOT/logs/$R.log" > "$D/train_log_tail.txt" 2>/dev/null
+    LAST=$(ls "$D"/progress/*.mp4 2>/dev/null | sort | tail -1)
+    (cd "$ROOT/runs" && zip -q -r "$Z" "$R" -x "*.bak" "*model_tmp*" "*.tmp" "$R/progress/*" \
+        && { [ -z "$LAST" ] || zip -q "$Z" "$R/progress/$(basename "$LAST")"; })
+    echo "saved $Z ($(du -h "$Z" | cut -f1))"
+    echo "download: http://$(IP):8081/exports/$(basename "$Z")" ;;
+  update)  git -C "$REPO" pull && "$PY" -m pip install -q -e "$REPO[train]" && $U restart kacha-watch \
+             && echo "code updated (kacha restart to use it for training)" ;;
+  *) cat <<HELP
+kacha job                          show the current job
+kacha job SEASON [STEPS] ["EXTRA"] set the job, e.g.  kacha job none 20000000
+                                   seasons: none dry early_monsoon peak_monsoon extreme mix
+                                   EXTRA: "--scan" (height scan), "--seed 1"
+kacha start | stop | restart       control training (after a reboot: kacha start resumes)
+kacha status                       latest progress, eval, speed, CPU temperature
+kacha log [N]                      follow the training log (Ctrl+C to leave; training continues)
+kacha video [RUN]                  film the best policy on the three test roads now
+kacha export [RUN]                 zip a run (results, best model, latest video, log tail)
+kacha update                       get the latest code from GitHub
+Dashboard: http://<this-pc>:8081
+HELP
+  ;;
+esac

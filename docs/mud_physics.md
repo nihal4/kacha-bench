@@ -110,8 +110,10 @@ A Go1-sized foot (r = 0.023 m) carrying a quarter of the Go1's weight (31 N), pa
 | Peak monsoon | 10.64 cm | 10.67 cm | 10.68 cm |
 | Extreme | 20.0 cm (hardpan) | 20.0 cm | 19.0 cm (still sinking at 0.1 m/s cap) |
 
-Go1 standing (motors holding the home pose, 4 s, `scripts/go1_on_road.py --season ...`):
-early monsoon 0.8–2.3 cm sinkage; peak monsoon 9–15 cm; extreme ~20 cm (on the hardpan).
+Go1 standing (motors holding the home pose, 4 s, `scripts/go1_on_road.py --season ...`,
+seed 0): early monsoon 0.7–1.0 cm sinkage; peak monsoon 8–15 cm; extreme ~20 cm (on the
+hardpan). Inside the training environment (4 ms physics step, Kp 35) the results are
+similar: early ~1 cm, peak 7–15 cm, extreme 20 cm.
 
 This verifies that **the simulation does what the equations say**. It does not yet
 validate the equations against measured mud; see Section 8.

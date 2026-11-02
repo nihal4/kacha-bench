@@ -19,7 +19,8 @@ The Local Government Engineering Department's guideline for evaluating rural pav
 LGED gives only lower bounds for "severe"; the upper bounds (200 mm deep, 800 mm across)
 are our choice. The default mix is 40% minor, 40% moderate, 20% severe (assumption).
 Potholes have a flat floor and steep walls (outer 30% of the radius), so stepping in is
-a sudden drop, not a gentle bowl.
+a sudden drop, not a gentle bowl. The terrain grid is 4 cm, so the smallest pothole
+(15 cm) spans about four cells.
 
 The same guideline gives rut severity for paved roads (minor < 10 mm, moderate 10–20 mm,
 severe > 20 mm) and carriageway widths from 3.0 m (design type 8) to 7.3 m. KachaBench
@@ -79,9 +80,9 @@ The Go1 holds its standing pose with its front-right foot over the deepest potho
 
 | Season | Scanner sees vs real floor | FR foot drop | Result |
 |---|---|---|---|
-| Dry | no water, floor visible | 0.9 cm (foot hangs over the hole) | stays upright on three legs |
-| Early monsoon | 8.9 cm of water hides the floor | 10.7 cm | tips over |
-| Peak monsoon | 15.9 cm of water hides the floor | 20.7 cm | tips over |
+| Dry | no water, floor visible | 1.7 cm (foot hangs over the hole) | stays upright on three legs |
+| Early monsoon | 9.6 cm of water hides the floor | 12.9 cm | tips over |
+| Peak monsoon | 16.6 cm of water hides the floor | 16.0 cm | tips over |
 
 **Main finding:** the water's own forces on a walking-size robot are small (leg
 buoyancy and drag below 1 N each, against 31 N of weight per leg). The hazard is the

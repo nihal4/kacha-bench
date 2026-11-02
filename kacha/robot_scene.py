@@ -34,7 +34,8 @@ def _add_hfield(spec, name, heights, length, width, **geom_kw):
 
 
 def build_robot_scene(heights, length, width, robot="unitree_go1", mud_depth=0.0,
-                      feet=GO1_FEET, water=None, base_xy=(0.0, 0.0)):
+                      feet=GO1_FEET, water=None, base_xy=(0.0, 0.0), feet_trunk_only=False,
+                      timestep=None):
     """Return (model, home_qpos) with the robot standing on the road centre.
 
     heights is the ground surface. With mud_depth > 0 the rigid geometry ("terrain")
@@ -43,6 +44,15 @@ def build_robot_scene(heights, length, width, robot="unitree_go1", mud_depth=0.0
     """
     entry = mm.get(robot)
     spec = entry.spec(entry.default_model)
+    if timestep:
+        spec.option.timestep = timestep
+    if feet_trunk_only:
+        # Only feet and trunk touch the world (like MuJoCo Playground's "feet only" Go1):
+        # leg capsules on the height field create dozens of contacts and slow training.
+        for g in spec.geoms:
+            body = g.parent.name if g.parent else ""
+            if g.name not in feet and body != "trunk":
+                g.contype, g.conaffinity = 0, 0
 
     spec.add_material(name="earth", rgba=[0.55, 0.42, 0.28, 1])
     spec.add_material(name="mud", rgba=[0.33, 0.24, 0.15, 0.55])

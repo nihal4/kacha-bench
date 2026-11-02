@@ -63,14 +63,13 @@ The mud model is built from classical soil mechanics: mud strength comes from so
 
 ## Compute plan
 
-The same terrain code runs in standard MuJoCo (CPU) and MJX (GPU).
+Training currently runs on an always-on 4-core Linux PC (CPU MuJoCo + Stable-Baselines3 PPO), controlled with the `kacha` command and watched on a web dashboard. See [`docs/training.md`](docs/training.md). An MJX (GPU) port for Kaggle is planned for larger sweeps.
 
 | Task | Where |
 |---|---|
-| Environment building, physics tuning, visual debugging | Local CPU (MuJoCo) |
-| Short sanity training runs | Local CPU |
-| Main training runs (all seeds and robots) | Kaggle GPU (MJX) |
-| Evaluation, videos, analysis | Local CPU |
+| Environment building, physics tuning, tests | Local CPU (MuJoCo) |
+| Training runs | Always-on PC (`kacha start`, dashboard on port 8081) |
+| Large multi-seed sweeps (later) | Kaggle GPU (MJX port) |
 
 ## Repository layout
 
@@ -81,17 +80,23 @@ kacha-bench/
 │   ├── scene.py           # Builds a MuJoCo model from a generated terrain
 │   ├── robot_scene.py     # Puts a Menagerie robot (Go1) on the terrain, with optional mud layer
 │   ├── mud.py             # Wet-clay mud model (soil mechanics) and its MuJoCo coupling
-│   └── water.py           # Water-filled potholes: hidden depth, buoyancy and drag
+│   ├── water.py           # Water-filled potholes: hidden depth, buoyancy and drag
+│   ├── walk_env.py        # Go1 walking environment (Gymnasium), seasons, height scan
+│   └── safety.py          # RAM / CPU-temperature guards for long training runs
 ├── scripts/
 │   ├── smoke_test.py      # Builds a terrain, drops a test body, checks the simulation runs
 │   ├── go1_on_road.py     # Go1 standing on the road or in mud for a season, renders a video
 │   ├── mud_probe.py       # Foot-drop probe test: mud forces vs the equations, plus figure
 │   ├── water_probe.py     # Water forces on Go1-sized parts vs hand calculations
-│   └── go1_pothole.py     # Go1 with one foot over a water-filled pothole, per season
+│   ├── go1_pothole.py     # Go1 with one foot over a water-filled pothole, per season
+│   ├── train.py           # PPO training (profiles, safe checkpoints, --resume)
+│   ├── record.py          # Film a trained policy on three fixed test roads
+│   └── desktop/           # Always-on PC: setup.sh, kacha command, services, dashboard
 ├── docs/
 │   ├── related_work.md    # Literature notes and positioning
 │   ├── mud_physics.md     # Mud model: equations, sources, verification, limitations
 │   ├── water_physics.md   # Potholes and water: sources, verification, limitations
+│   ├── training.md        # Environment, reward, PPO settings, PC workflow
 │   └── figures/           # Generated figures
 ├── requirements.txt
 └── pyproject.toml
@@ -118,7 +123,8 @@ python scripts/smoke_test.py --view     # opens the MuJoCo viewer
 - [x] Potholes sized by the LGED rural-road guideline; water-filled potholes with hidden depth, buoyancy and drag (`docs/water_physics.md`, `scripts/water_probe.py`, `scripts/go1_pothole.py`)
 - [ ] Brick road and bamboo bridge elements
 - [ ] Seasonal parameter sets and difficulty levels
-- [ ] Go1 locomotion environment and first PPO baseline
+- [x] Go1 walking environment (Playground Go1 joystick reward) and PPO training pipeline with dashboard (`docs/training.md`)
+- [ ] First Go1 walking policy on the rigid road
 - [ ] Physics parameter grounding and validation check
 - [ ] MJX port and Kaggle training notebook
 - [ ] Humanoid environments (Berkeley Humanoid, G1)
