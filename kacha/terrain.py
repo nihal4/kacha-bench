@@ -9,19 +9,27 @@ from dataclasses import dataclass
 import numpy as np
 
 
+# Pothole severity classes for rural roads, LGED (2025) guideline: depth and diameter (m).
+# LGED gives only lower bounds for "severe"; the upper bounds here are our choice.
+POTHOLE_CLASSES = {
+    "minor":    {"depth": (0.02, 0.05), "diameter": (0.15, 0.30)},
+    "moderate": {"depth": (0.05, 0.10), "diameter": (0.30, 0.50)},
+    "severe":   {"depth": (0.10, 0.20), "diameter": (0.50, 0.80)},
+}
+
+
 @dataclass
 class RoadConfig:
     length: float = 10.0          # metres along the road (x)
     width: float = 6.0            # metres across the whole patch (y)
-    resolution: float = 0.05      # metres per cell
-    road_width: float = 2.0       # width of the raised road surface
+    resolution: float = 0.025     # metres per cell
+    road_width: float = 3.0       # LGED smallest rural-road carriageway (design type 8)
     embankment_height: float = 0.3  # road surface above the surrounding ground
     ditch_depth: float = 0.2      # extra depth of the ditches beside the road
-    rut_depth: float = 0.05
+    rut_depth: float = 0.05       # earthen-road wheel ruts (LGED "severe" on paved is > 20 mm)
     rut_spacing: float = 1.0      # distance between the two wheel ruts
     n_potholes: int = 4
-    pothole_radius: tuple = (0.2, 0.5)
-    pothole_depth: tuple = (0.05, 0.25)
+    pothole_mix: tuple = (0.4, 0.4, 0.2)   # share of minor, moderate, severe
     roughness: float = 0.01       # small random bumps on the surface
 
 
@@ -56,18 +64,26 @@ def add_ruts(h, Y, cfg):
 
 
 def add_potholes(h, X, Y, cfg, rng):
-    """Bowl-shaped potholes on the road surface. Returns the pothole list."""
+    """Steep-walled potholes (flat floor, walls over the outer 30% of the radius),
+    sized by the LGED severity classes. Returns the pothole list; each records its
+    rim height, which is where rain water fills it to."""
     holes = []
     half = cfg.road_width / 2
+    names = list(POTHOLE_CLASSES)
     for _ in range(cfg.n_potholes):
-        r = rng.uniform(*cfg.pothole_radius)
-        d = rng.uniform(*cfg.pothole_depth)
+        sev = names[rng.choice(3, p=np.array(cfg.pothole_mix) / sum(cfg.pothole_mix))]
+        c = POTHOLE_CLASSES[sev]
+        r = rng.uniform(*c["diameter"]) / 2
+        d = rng.uniform(*c["depth"])
         cx = rng.uniform(-cfg.length / 2 + 1.0, cfg.length / 2 - 1.0)
         cy = rng.uniform(-half + r, half - r)
-        dist2 = (X - cx) ** 2 + (Y - cy) ** 2
-        bowl = d * np.clip(1 - dist2 / r ** 2, 0, None)
-        h -= bowl
-        holes.append({"center": (cx, cy), "radius": r, "depth": d})
+        dist = np.sqrt((X - cx) ** 2 + (Y - cy) ** 2)
+        inside = dist < r
+        rim = float(np.min(h[(dist >= r) & (dist < r + 2 * cfg.resolution)]))
+        t = np.clip((r - dist) / (0.3 * r), 0.0, 1.0)            # 0 at rim, 1 on floor
+        h -= d * (t * t * (3 - 2 * t)) * inside                    # smooth steep wall
+        holes.append({"center": (cx, cy), "radius": r, "depth": d,
+                      "severity": sev, "rim": rim})
     return h, holes
 
 

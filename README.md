@@ -48,7 +48,7 @@ Exact mud and water physics (MPM/DEM particle simulation) is far too slow for RL
 
 - **Geometry:** height fields for roads, ruts, potholes, embankments and ditches.
 - **Mud:** soft contact settings plus extra forces for sinkage, bulldozing resistance and lift-off suction.
-- **Water:** drag, buoyancy and reduced friction inside water regions, with pothole depth hidden below the surface.
+- **Water:** potholes sized by the LGED (2025) rural-road guideline fill with opaque water that hides their depth; submerged robot parts feel buoyancy and Morison drag. See [`docs/water_physics.md`](docs/water_physics.md).
 
 The mud model is built from classical soil mechanics: mud strength comes from soil moisture (liquidity index), and strength sets the bearing, sideways and suction forces on each foot, using measured properties of Bangladeshi clays. Full derivation, sources, verification and limitations: [`docs/mud_physics.md`](docs/mud_physics.md). These are approximations, and the paper will say so.
 
@@ -80,14 +80,18 @@ kacha-bench/
 │   ├── terrain.py         # Height-field generators (road, ruts, potholes, embankment)
 │   ├── scene.py           # Builds a MuJoCo model from a generated terrain
 │   ├── robot_scene.py     # Puts a Menagerie robot (Go1) on the terrain, with optional mud layer
-│   └── mud.py             # Wet-clay mud model (soil mechanics) and its MuJoCo coupling
+│   ├── mud.py             # Wet-clay mud model (soil mechanics) and its MuJoCo coupling
+│   └── water.py           # Water-filled potholes: hidden depth, buoyancy and drag
 ├── scripts/
 │   ├── smoke_test.py      # Builds a terrain, drops a test body, checks the simulation runs
 │   ├── go1_on_road.py     # Go1 standing on the road or in mud for a season, renders a video
-│   └── mud_probe.py       # Foot-drop probe test: mud forces vs the equations, plus figure
+│   ├── mud_probe.py       # Foot-drop probe test: mud forces vs the equations, plus figure
+│   ├── water_probe.py     # Water forces on Go1-sized parts vs hand calculations
+│   └── go1_pothole.py     # Go1 with one foot over a water-filled pothole, per season
 ├── docs/
 │   ├── related_work.md    # Literature notes and positioning
 │   ├── mud_physics.md     # Mud model: equations, sources, verification, limitations
+│   ├── water_physics.md   # Potholes and water: sources, verification, limitations
 │   └── figures/           # Generated figures
 ├── requirements.txt
 └── pyproject.toml
@@ -111,7 +115,7 @@ python scripts/smoke_test.py --view     # opens the MuJoCo viewer
 - [x] Mud contact model (sinkage, sideways resistance, suction) from soil mechanics, verified against its equations (`scripts/mud_probe.py`)
 - [x] Go1 standing in mud for each season (`scripts/go1_on_road.py --season peak_monsoon`)
 - [ ] Validate the mud model against measured Go1 foot-force data (Godon et al. 2025)
-- [ ] Water regions with hidden pothole depth
+- [x] Potholes sized by the LGED rural-road guideline; water-filled potholes with hidden depth, buoyancy and drag (`docs/water_physics.md`, `scripts/water_probe.py`, `scripts/go1_pothole.py`)
 - [ ] Brick road and bamboo bridge elements
 - [ ] Seasonal parameter sets and difficulty levels
 - [ ] Go1 locomotion environment and first PPO baseline

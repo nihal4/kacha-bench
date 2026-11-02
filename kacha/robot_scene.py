@@ -34,7 +34,7 @@ def _add_hfield(spec, name, heights, length, width, **geom_kw):
 
 
 def build_robot_scene(heights, length, width, robot="unitree_go1", mud_depth=0.0,
-                      feet=GO1_FEET):
+                      feet=GO1_FEET, water=None, base_xy=(0.0, 0.0)):
     """Return (model, home_qpos) with the robot standing on the road centre.
 
     heights is the ground surface. With mud_depth > 0 the rigid geometry ("terrain")
@@ -51,11 +51,14 @@ def build_robot_scene(heights, length, width, robot="unitree_go1", mud_depth=0.0
         _add_hfield(spec, "mud", heights, length, width, material="mud",
                     contype=0, conaffinity=0, group=1)
         add_mud_plates(spec, feet)
+    if water is not None:
+        water.add_visuals(spec)
     spec.worldbody.add_light(pos=[0, 0, 4], dir=[0, 0, -1])
     spec.visual.global_.offwidth = 1280
     spec.visual.global_.offheight = 720
 
     model = spec.compile()
     home = model.key("home").qpos.copy()
+    home[0], home[1] = base_xy
     home[2] += terrain_height(heights, length, width, home[0], home[1])
     return model, home
