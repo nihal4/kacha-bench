@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kacha-bench"
+version = "0.0.1"
+description = "Procedurally generated rural monsoon-road terrain benchmark for legged-robot locomotion RL (MuJoCo/MJX)"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "S. M. Nihal Ahmed" }]
+requires-python = ">=3.10"
+dependencies = ["mujoco>=3.2", "numpy"]
+
+[project.optional-dependencies]
+mjx = ["mujoco-mjx", "jax"]
+
+[tool.setuptools]
+packages = ["kacha"]

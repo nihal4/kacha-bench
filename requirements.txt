@@ -1,0 +1,6 @@
+mujoco>=3.2
+numpy
+# GPU training on Kaggle (optional):
+# mujoco-mjx
+# jax[cuda12]
+# playground
