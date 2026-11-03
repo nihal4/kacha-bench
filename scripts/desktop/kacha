@@ -16,6 +16,9 @@ case "${1:-help}" in
       *) echo "unknown season '$SEASON' (none, dry, early_monsoon, peak_monsoon, extreme, mix)"; exit 1 ;; esac
     NAME="go1-$SEASON"
     case "$EXTRA" in *--scan*) NAME="$NAME-scan" ;; esac
+    # reward version is part of the run name, so a v2 job never resumes an older
+    # Playground-reward run (runs/go1-none-s0 stays as it was)
+    case "$EXTRA" in *"--reward playground"*) ;; *) NAME="$NAME-v2" ;; esac
     SEED=$(echo "$EXTRA" | grep -oE -- '--seed [0-9]+' | awk '{print $2}'); NAME="$NAME-s${SEED:-0}"
     printf 'SEASON=%s\nSTEPS=%s\nEXTRA="%s"\nNAME=%s\n' "$SEASON" "$STEPS" "$EXTRA" "$NAME" > "$JOB"
     echo "job set: $SEASON, $STEPS steps, extra='$EXTRA' -> runs/$NAME  (kacha restart to switch now)" ;;
@@ -52,7 +55,8 @@ case "${1:-help}" in
 kacha job                          show the current job
 kacha job SEASON [STEPS] ["EXTRA"] set the job, e.g.  kacha job none 20000000
                                    seasons: none dry early_monsoon peak_monsoon extreme mix
-                                   EXTRA: "--scan" (height scan), "--seed 1"
+                                   EXTRA: "--scan" (height scan), "--seed 1",
+                                          "--reward playground" (old reward; default v2)
 kacha start | stop | restart       control training (after a reboot: kacha start resumes)
 kacha status                       latest progress, eval, speed, CPU temperature
 kacha log [N]                      follow the training log (Ctrl+C to leave; training continues)

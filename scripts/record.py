@@ -23,7 +23,8 @@ def record(run, out, best=False, seeds=TEST_SEEDS):
     from kacha.walk_env import Go1WalkEnv
 
     cfg = json.load(open(os.path.join(run, "config.json")))
-    mk = lambda: Go1WalkEnv(season=cfg["season"], height_scan=cfg["scan"], seed=0)
+    mk = lambda: Go1WalkEnv(season=cfg["season"], height_scan=cfg["scan"], seed=0,
+                            reward=cfg.get("reward", "playground"))
     m_path = os.path.join(run, "best_model.zip" if best else "model.zip")
     v_path = os.path.join(run, "best_vecnormalize.pkl" if best else "vecnormalize.pkl")
     norm = VecNormalize.load(v_path, DummyVecEnv([mk]))

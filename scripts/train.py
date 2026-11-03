@@ -38,19 +38,22 @@ def parse():
     ap.add_argument("--runs_dir", default="runs")
     ap.add_argument("--name")
     ap.add_argument("--resume", action="store_true")
+    ap.add_argument("--reward", default="v2", choices=["v2", "playground"],
+                    help="reward version (docs/training.md); 'playground' reproduces older runs")
     args = ap.parse_args()
     cfg = dict(PROFILES[args.profile])
     for k in ("total_steps", "n_envs"):
         if getattr(args, k):
             cfg[k] = getattr(args, k)
-    args.name = args.name or f"go1-{args.season}{'-scan' if args.scan else ''}-s{args.seed}"
+    tag = "" if args.reward == "playground" else f"-{args.reward}"
+    args.name = args.name or f"go1-{args.season}{'-scan' if args.scan else ''}{tag}-s{args.seed}"
     return args, cfg
 
 
-def make_env(season, scan, seed):
+def make_env(season, scan, seed, reward="v2"):
     def _f():
         from kacha.walk_env import Go1WalkEnv
-        return Go1WalkEnv(season=season, seed=seed, height_scan=scan)
+        return Go1WalkEnv(season=season, seed=seed, height_scan=scan, reward=reward)
     return _f
 
 
@@ -76,15 +79,21 @@ def main():
     out = os.path.join(args.runs_dir, args.name)
     os.makedirs(out, exist_ok=True)
     model_path, vn_path = os.path.join(out, "model.zip"), os.path.join(out, "vecnormalize.pkl")
+    cfg_file = os.path.join(out, "config.json")
+    if args.resume and os.path.exists(cfg_file):
+        # a resumed run keeps the reward it was started with (runs before v2 have no
+        # "reward" key and used the Playground port)
+        args.reward = json.load(open(cfg_file)).get("reward", "playground")
+        print(f"[train] resuming with reward version {args.reward}", flush=True)
     config = {"env": "go1_walk", "season": args.season, "scan": args.scan, "seed": args.seed,
-              "profile": args.profile, **cfg}
-    if not (args.resume and os.path.exists(os.path.join(out, "config.json"))):
-        json.dump(config, open(os.path.join(out, "config.json"), "w"), indent=2)
+              "profile": args.profile, "reward": args.reward, **cfg}
+    if not (args.resume and os.path.exists(cfg_file)):
+        json.dump(config, open(cfg_file, "w"), indent=2)
 
     Vec = SubprocVecEnv if cfg["n_envs"] > 1 else DummyVecEnv
-    venv = Vec([make_env(args.season, args.scan, args.seed * 1000 + i) for i in range(cfg["n_envs"])])
+    venv = Vec([make_env(args.season, args.scan, args.seed * 1000 + i, args.reward) for i in range(cfg["n_envs"])])
     venv = VecMonitor(venv, info_keywords=("is_success", "distance"))
-    eval_env = VecMonitor(DummyVecEnv([make_env(args.season, args.scan, 10_000 + args.seed)]),
+    eval_env = VecMonitor(DummyVecEnv([make_env(args.season, args.scan, 10_000 + args.seed, args.reward)]),
                           info_keywords=("is_success", "distance"))
 
     resumed = False
@@ -190,7 +199,7 @@ def main():
 
     remaining = max(cfg["total_steps"] - model.num_timesteps, 0)
     print(f"[train] {args.name}: season {args.season}, height scan {args.scan}, "
-          f"{cfg['n_envs']} envs, training for {remaining:,} steps -> {out}", flush=True)
+          f"reward {args.reward}, {cfg['n_envs']} envs, training for {remaining:,} steps -> {out}", flush=True)
     try:
         model.learn(remaining, callback=callbacks, reset_num_timesteps=not resumed, progress_bar=False)
     except KeyboardInterrupt:

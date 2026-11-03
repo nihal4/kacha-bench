@@ -29,6 +29,14 @@ WEIGHTS = dict(tracking_lin_vel=1.0, tracking_ang_vel=0.5, lin_vel_z=-0.5, ang_v
                feet_air_time=0.1)
 TRACKING_SIGMA = 0.25
 POSE_W = np.tile([1.0, 1.0, 0.1], 4)            # hip, thigh, calf per leg
+# Reward versions (docs/training.md, "Reward versions"):
+#   "playground" - the original port (kept to reproduce earlier runs)
+#   "v2"         - fixes: standing still no longer pays, Playground's torque cost,
+#                  soft clip floor with a one-off fall penalty
+REWARD_VERSIONS = ("playground", "v2")
+V2_SIGMA_FRAC = 0.5      # v2 forward-speed tolerance: sigma_x = (0.5 * cmd)^2
+V2_CLIP_LO = -1.0        # v2 floor of the summed reward, per second (times dt per step)
+V2_FALL_PENALTY = 3.0    # v2 one-off penalty on a fall, applied after the clip
 NOISE = dict(linvel=0.1, gyro=0.2, gravity=0.05, joint_pos=0.03, joint_vel=1.5)
 KP, KD = 35.0, 0.5
 
@@ -38,7 +46,10 @@ class Go1WalkEnv(gym.Env):
 
     def __init__(self, season="none", seed=None, max_steps=1000, cmd_range=(0.3, 0.8),
                  regen_every=20, height_scan=False, frame_skip=5, timestep=0.004,
-                 action_scale=0.5, obs_noise=True, render_mode=None):
+                 action_scale=0.5, obs_noise=True, render_mode=None, reward="v2"):
+        if reward not in REWARD_VERSIONS:
+            raise ValueError(f"reward must be one of {REWARD_VERSIONS}, got {reward!r}")
+        self.reward_version = reward
         self.obs_noise = obs_noise
         self.timestep = timestep
         self.season = season
@@ -158,22 +169,9 @@ class Go1WalkEnv(gym.Env):
 
         q, qd, tau = d.qpos[7:19], d.qvel[6:18], d.actuator_force
         fell = g[2] > 0.0 or self._trunk_hit()      # Playground: up-vector below horizontal
-        terms = dict(
-            tracking_lin_vel=np.exp(-((v[0] - self.cmd) ** 2 + v[1] ** 2) / TRACKING_SIGMA),
-            tracking_ang_vel=np.exp(-(w[2] ** 2) / TRACKING_SIGMA),
-            lin_vel_z=v[2] ** 2, ang_vel_xy=w[0] ** 2 + w[1] ** 2,
-            orientation=g[0] ** 2 + g[1] ** 2,
-            dof_pos_limits=float(np.sum(np.clip(self.soft_lo - q, 0, None)
-                                        + np.clip(q - self.soft_hi, 0, None))),
-            pose=np.exp(-np.sum((q - self.home[7:]) ** 2 * POSE_W)),
-            termination=float(fell),
-            torques=float(np.sum(tau ** 2)),
-            action_rate=float(np.sum((a - self.last_action) ** 2)),
-            energy=float(np.sum(np.abs(qd * tau))),
-            feet_slip=slip, feet_air_time=air_rew)
-        # Playground (and legged_gym "only positive rewards"): the summed step reward is
-        # clipped at zero, so early noisy movement is not punished below standing still
-        reward = float(np.clip(self.dt * sum(WEIGHTS[k] * terms[k] for k in WEIGHTS), 0.0, 1e4))
+        terms = self._terms(v, w, g, q, qd, tau, a, fell, slip, air_rew)
+        reward = self._total(terms, fell)
+        self.last_terms = terms
         self.last_action = a
         reached = d.qpos[0] > self.cfg.length / 2 - 0.5
         terminated = bool(fell)
@@ -186,6 +184,51 @@ class Go1WalkEnv(gym.Env):
             walked = info["distance"] >= 0.5 * self.cmd * self.steps * self.dt
             info["is_success"] = bool(not fell and (reached or walked))
         return self._obs(), float(reward), terminated, truncated, info
+
+    # ------------------------------------------------------------------ reward
+    def _terms(self, v, w, g, q, qd, tau, a, fell, slip, air_rew):
+        """Unweighted reward terms. See docs/training.md for both versions."""
+        pose = np.exp(-np.sum((q - self.home[7:]) ** 2 * POSE_W))
+        yaw = np.exp(-(w[2] ** 2) / TRACKING_SIGMA)
+        if self.reward_version == "playground":
+            track = np.exp(-((v[0] - self.cmd) ** 2 + v[1] ** 2) / TRACKING_SIGMA)
+            torques = float(np.sum(tau ** 2))
+        else:
+            # Fix 1: with the fixed sigma 0.25, standing still (v = 0) earned exp(-cmd^2/0.25),
+            # 0.70 of the tracking reward at cmd 0.3 m/s, and pose + yaw paid up to 1.0/s more.
+            # Forward error is now relative to the command: v = 0 earns exp(-4) = 0.02, and
+            # pose / yaw are paid in proportion to forward progress.
+            sigma_x = max((V2_SIGMA_FRAC * self.cmd) ** 2, 1e-4)
+            track = np.exp(-(v[0] - self.cmd) ** 2 / sigma_x - v[1] ** 2 / TRACKING_SIGMA)
+            progress = float(np.clip(v[0] / self.cmd, 0.0, 1.0))
+            pose, yaw = pose * progress, yaw * progress
+            # Fix 2: Playground's torque cost is ||tau||_2 + ||tau||_1, not sum(tau^2)
+            # (sum(tau^2) was ~8x larger under exploration noise).
+            torques = float(np.sqrt(np.sum(tau ** 2)) + np.sum(np.abs(tau)))
+        return dict(
+            tracking_lin_vel=float(track), tracking_ang_vel=float(yaw),
+            lin_vel_z=v[2] ** 2, ang_vel_xy=w[0] ** 2 + w[1] ** 2,
+            orientation=g[0] ** 2 + g[1] ** 2,
+            dof_pos_limits=float(np.sum(np.clip(self.soft_lo - q, 0, None)
+                                        + np.clip(q - self.soft_hi, 0, None))),
+            pose=float(pose), termination=float(fell), torques=torques,
+            action_rate=float(np.sum((a - self.last_action) ** 2)),
+            energy=float(np.sum(np.abs(qd * tau))),
+            feet_slip=slip, feet_air_time=air_rew)
+
+    def _total(self, terms, fell):
+        raw = self.dt * sum(WEIGHTS[k] * terms[k] for k in WEIGHTS)
+        if self.reward_version == "playground":
+            # Playground (and legged_gym "only positive rewards"): clip at zero
+            return float(np.clip(raw, 0.0, 1e4))
+        # Fix 3: a hard zero floor hid every penalty in mud (60% of noisy steps scored
+        # exactly 0). Under PPO's initial exploration noise the summed terms have a median
+        # of -0.44/s on the rigid road and -1.3/s in peak-monsoon mud, so a floor at -1/s
+        # keeps most slip / tilt / sinking signal visible. The fall penalty sits outside
+        # the clip and must beat the most a policy could save by falling to escape the
+        # floor forever: 1.0/s * dt / (1 - gamma) = 0.02 / 0.01 = 2.0, so 3.0.
+        r = float(np.clip(raw, V2_CLIP_LO * self.dt, 1e4))
+        return r - V2_FALL_PENALTY * float(fell)
 
     # ------------------------------------------------------------------ helpers
     def _foot_contacts(self):

@@ -33,12 +33,45 @@ Reward (each term multiplied by the 0.02 s control step), Playground scales:
 | ang_vel_xy | -0.05 | feet_slip | -0.1 |
 | orientation | -5.0 | | |
 
-As in Playground, the summed step reward (times the control step) is **clipped at zero**
-(legged_gym calls this "only positive rewards"). Without the clip, a first learning check
-drifted to standing still: with exploration noise, the energy and torque penalties per
-step outweighed the tracking reward, so moving less was the easiest way to score more.
-
 Not used: Playground's foot-clearance and foot-height terms, and lateral and yaw commands.
+
+### Reward versions
+
+`Go1WalkEnv(reward=...)` and `train.py --reward` select one. `v2` is the default; a run
+started without the flag before v2 existed is resumed with `playground` (read from its
+`config.json`).
+
+**`playground`** is the port above, with the summed step reward clipped at zero (legged_gym
+"only positive rewards"). Three problems, measured in the environment (`seed 0`, 300
+steps):
+
+1. *Standing still pays almost as much as walking.* With the fixed sigma 0.25, `v = 0`
+   earns `exp(-cmd^2/0.25)` of the tracking reward: 0.70 at 0.3 m/s, 0.30 at 0.55 m/s.
+   `pose` and `tracking_ang_vel` pay up to 1.0/s more for not moving. Zero actions scored
+   0.033 per step against a ceiling of about 0.04 for perfect walking (before penalties).
+   Playground avoids this with lateral/yaw commands and a stand-still cost; with forward
+   commands only, nothing does.
+2. *The torque cost was `sum(tau^2)`, not Playground's `||tau||_2 + ||tau||_1`.* Under PPO's
+   initial exploration noise (std 0.6) it cost 0.197 per step against 0.024 for
+   Playground's form, more than the whole standing reward. This is the likely cause of the
+   earlier drift to standing still that the clip was added to fix.
+3. *The zero clip hides penalties in mud.* In peak monsoon with exploration noise, 60% of
+   steps scored exactly 0, so tilting, slipping and sinking gave no learning signal.
+
+**`v2`** changes only these three things:
+
+| Change | v2 | Effect (zero actions / noise std 0.6, rigid road) |
+|---|---|---|
+| Forward tracking | `exp(-(v_x - cmd)^2 / (0.5 cmd)^2 - v_y^2 / 0.25)`; `pose` and `tracking_ang_vel` multiplied by `clip(v_x / cmd, 0, 1)` | standing: 0.033 → 0.0003 per step; walking at the command still earns ~0.04 |
+| Torque cost | `||tau||_2 + ||tau||_1` (Playground) | 0.197 → 0.024 per step under noise |
+| Clip | summed reward floored at `-1.0/s` (−0.02 per step) instead of 0; one-off fall penalty 3.0 outside the clip | penalised steps visible again; see below |
+
+Choosing the floor: under exploration noise the summed terms have a median of −0.44/s on
+the rigid road and −1.3/s in peak-monsoon mud (orientation and body rotation dominate),
+so −1.0/s keeps most of that signal (14% of noisy rigid-road steps reach the floor, against
+69% with a −0.25/s floor). A negative reward invites falling on purpose to end the episode;
+the most that saves is `1.0/s × dt / (1 − gamma) = 2.0`, so the fall penalty is 3.0.
+These two constants are design choices and belong in the sensitivity study.
 
 **Success ("walked")**: the episode ends without a fall AND the robot reached the end of
 the road or covered at least half the commanded distance. Standing still is not success.
