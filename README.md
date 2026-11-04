@@ -1,10 +1,10 @@
 # KachaBench
 
-**A procedurally generated rural monsoon-road terrain benchmark for legged-robot locomotion with reinforcement learning, built on MuJoCo and MJX.**
+**A robustness study of humanoid locomotion on rural monsoon roads: when, how and why a walking humanoid fails on wet clay, ruts and water-hidden potholes. Built on MuJoCo, with mud physics from soil mechanics and Bangladeshi clay data.**
 
 > *Kacha rasta* (কাঁচা রাস্তা) is Bangla for an unpaved earthen road. These are the roads that connect most villages in Bangladesh, and for several months each year the monsoon turns them into mud, ruts and water-filled potholes.
 
-**Status:** early development. The terrain generator is a prototype; no results yet.
+**Status:** early development. Humanoid stage 1 (Unitree G1 crossing a muddy rutted road) is built, with failure-cause recording and robustness sweeps; no results yet. Study plan: [`docs/study.md`](docs/study.md).
 
 ---
 
@@ -24,15 +24,19 @@ These roads combine several hazards at once:
 
 ## Research questions
 
-1. How well do standard locomotion controllers (MLP, recurrent, height-map-based) handle hidden-depth and sticky-mud hazards that existing benchmarks do not model?
-2. Do policies trained on dry-season and early-monsoon conditions generalise to peak-monsoon conditions they have not seen?
-3. How do quadrupeds and humanoids differ on the same terrain?
+The project is a robustness study rather than a leaderboard: a few controllers, each differing in one way, tested in depth across controlled mud conditions ([`docs/study.md`](docs/study.md)).
+
+1. **Breakdown:** at what soil strength, mud depth, friction, suction and water level does humanoid walking break down, and how sharply?
+2. **Mechanism:** why does it fail: slips, sinking, suction trapping a foot, hidden-depth water, or balance loss, and how does the mix change with the mud?
+3. **Training conditions:** does a policy trained on rigid ground (Unitree's) or on one season hold up in another?
+4. **Load:** does carrying a box in the hands or a load on the head bring the breakdown earlier?
+5. **Gait adaptation:** do trained policies adapt their gait to mud the way people do on slippery ground?
 
 ## How this differs from existing work
 
 | | GenTe (2025) | MILD (2026) | **KachaBench** |
 |---|---|---|---|
-| Focus | Generic terrain generation from text/images | Accurate deformable contact model | Region-grounded benchmark and evaluation protocol |
+| Focus | Generic terrain generation from text/images | Accurate deformable contact model | Region-grounded robustness study: when and why humanoids fail on mud |
 | Water | Wading: drag, buoyancy, flow | — | Water-filled potholes with **hidden depth** |
 | Soft ground | Sand-style (friction + bulldozing) | Discrete-element yielding terrain | **Wet clay** with sinkage, slip and **suction** |
 | Scenes | 100 VLM-generated generic terrains | — | Procedural village-road layouts |
@@ -52,14 +56,15 @@ Exact mud and water physics (MPM/DEM particle simulation) is far too slow for RL
 
 The mud model is built from classical soil mechanics: mud strength comes from soil moisture (liquidity index), and strength sets the bearing, sideways and suction forces on each foot, using measured properties of Bangladeshi clays. Full derivation, sources, verification and limitations: [`docs/mud_physics.md`](docs/mud_physics.md). These are approximations, and the paper will say so.
 
-## Planned benchmark design
+## Study design
 
-- **Robots:** Unitree Go1 (quadruped, used first to validate the environment), Berkeley Humanoid, Unitree G1.
-- **Difficulty:** each terrain element has parameters (mud depth, puddle density, pothole size, road width, brick damage) grouped into difficulty levels for curriculum training.
-- **Seasons:** dry, early monsoon, peak monsoon.
-- **Splits:** train on dry + early monsoon, test on peak monsoon and on held-out terrain combinations.
-- **Metrics:** success rate, survival time, velocity-tracking error, energy per metre, and fall rate.
-- **Baselines:** PPO with MLP, PPO with GRU (memory), PPO with height-map input, and domain randomisation, each over multiple seeds.
+Full plan: [`docs/study.md`](docs/study.md).
+
+- **Robot:** Unitree G1 humanoid ([`docs/humanoid.md`](docs/humanoid.md)). The Unitree Go1 quadruped was used first to validate the mud and water models.
+- **Conditions:** the muddy rutted road, with one mud property varied at a time (soil wetness, mud depth, friction, suction, water in holes) across its plausible range, so results do not rest on one assumed value per season.
+- **Load (later):** none, a box in both hands, and a load on the head steadied with one hand plus a box in the other, as station porters carry.
+- **Controllers:** Unitree's pretrained rigid-ground policy, the scripted mud gait alone, and PPO policies trained on the dry road, early-monsoon mud, mixed seasons, and with memory, 3 seeds each.
+- **Measurements:** success with confidence intervals; the trigger of every fall (slip, sinking, suction trap, hidden water, balance loss) and how it fell; gait (step length, cadence, double support, foot lift, sinkage, sliding, cost of transport).
 
 ## Compute plan
 
@@ -82,6 +87,11 @@ kacha-bench/
 │   ├── mud.py             # Wet-clay mud model (soil mechanics) and its MuJoCo coupling
 │   ├── water.py           # Water-filled potholes: hidden depth, buoyancy and drag
 │   ├── walk_env.py        # Go1 walking environment (Gymnasium), seasons, height scan
+│   ├── g1_scene.py        # Unitree G1 humanoid on the road (contacts, Unitree PD gains)
+│   ├── gait.py            # Scripted mud-walking gait (leg IK) and balance controller
+│   ├── g1_env.py          # Humanoid stage 1: cross the muddy rutted road; failure causes, gait metrics
+│   ├── g1_policies.py     # Controllers for evaluation: scripted, trained, Unitree pretrained
+│   ├── look.py            # Sky, sun and shadows, wet clay, water, roadside plants
 │   └── safety.py          # RAM / CPU-temperature guards for long training runs
 ├── scripts/
 │   ├── smoke_test.py      # Builds a terrain, drops a test body, checks the simulation runs
@@ -89,6 +99,9 @@ kacha-bench/
 │   ├── mud_probe.py       # Foot-drop probe test: mud forces vs the equations, plus figure
 │   ├── water_probe.py     # Water forces on Go1-sized parts vs hand calculations
 │   ├── go1_pothole.py     # Go1 with one foot over a water-filled pothole, per season
+│   ├── g1_preview.py      # G1 on the muddy road with the scripted controller, video
+│   ├── g1_evaluate.py     # G1 per-season table: scripted, trained runs, Unitree's policy
+│   ├── g1_sweep.py        # Robustness curves: one mud property at a time, with fall causes
 │   ├── train.py           # PPO training (profiles, safe checkpoints, --resume)
 │   ├── record.py          # Film a trained policy on three fixed test roads
 │   └── desktop/           # Always-on PC: setup.sh, kacha command, services, dashboard
@@ -97,6 +110,8 @@ kacha-bench/
 │   ├── mud_physics.md     # Mud model: equations, sources, verification, limitations
 │   ├── water_physics.md   # Potholes and water: sources, verification, limitations
 │   ├── training.md        # Environment, reward, PPO settings, PC workflow
+│   ├── study.md           # Robustness study: questions, factors, controllers, measurements
+│   ├── humanoid.md        # G1 tasks, flat-foot mud, scripted gait, stage 1 reward
 │   └── figures/           # Generated figures
 ├── requirements.txt
 └── pyproject.toml
@@ -127,7 +142,12 @@ python scripts/smoke_test.py --view     # opens the MuJoCo viewer
 - [ ] First Go1 walking policy on the rigid road
 - [ ] Physics parameter grounding and validation check
 - [ ] MJX port and Kaggle training notebook
-- [ ] Humanoid environments (Berkeley Humanoid, G1)
+- [x] G1 humanoid stage 1 (muddy rutted road): flat-foot mud model, scripted mud-walking gait, residual PPO with balance-assist curriculum (`docs/humanoid.md`)
+- [x] Failure-cause recording, gait metrics and robustness sweeps (`docs/study.md`)
+- [ ] G1 stage 1 policies trained (dry, early monsoon, mix; 3 seeds each)
+- [ ] Robustness curves and failure mix for stage 1
+- [ ] G1 stage 2 (box in both hands) and stage 3 (head load + hand box)
+- [ ] Uphill earthen road and muddy steps
 - [ ] Full baseline sweep and evaluation protocol
 
 ## Author

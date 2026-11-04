@@ -32,6 +32,20 @@ class RoadConfig:
     pothole_mix: tuple = (0.4, 0.4, 0.2)   # share of minor, moderate, severe
     roughness: float = 0.01       # std of small surface bumps (m)
     roughness_scale: float = 0.10 # bump size (m): Gaussian correlation length
+    rut_sigma: float = 0.08       # rut half-width (m, Gaussian std)
+    rut_wobble: float = 0.0       # sideways meander of the ruts (m)
+    extra_ruts: int = 0           # more, shallower tracks at random places across the road
+    rut_puddles: int = 0          # small water-filled dips along the ruts
+
+
+def muddy_rut_road(**kw):
+    """Preset for a monsoon earthen road torn up by wheels (deep, meandering ruts with
+    water standing in them, as in field photos of Bangladeshi village roads). The rut
+    depth, meander and puddle counts are visual estimates, not measurements."""
+    base = dict(rut_depth=0.08, rut_sigma=0.11, rut_wobble=0.12, extra_ruts=3,
+                rut_puddles=8, n_potholes=2, roughness=0.015)
+    base.update(kw)
+    return RoadConfig(**base)
 
 
 def _grid(cfg):
@@ -57,11 +71,53 @@ def embankment(X, Y, cfg):
     return h
 
 
-def add_ruts(h, Y, cfg):
-    """Two smooth grooves where cart and van wheels run."""
-    for c in (-cfg.rut_spacing / 2, cfg.rut_spacing / 2):
-        h -= cfg.rut_depth * np.exp(-((Y - c) ** 2) / (2 * 0.08 ** 2))
-    return h
+def rut_lines(cfg, rng):
+    """Rut centre lines as (offset, depth, sigma, wobble phase, wobble wavelength)."""
+    ruts = [(c, cfg.rut_depth, cfg.rut_sigma, rng.uniform(0, 2 * np.pi), rng.uniform(4, 8))
+            for c in (-cfg.rut_spacing / 2, cfg.rut_spacing / 2)]
+    half = cfg.road_width / 2 - 0.3
+    for _ in range(cfg.extra_ruts):
+        ruts.append((rng.uniform(-half, half), cfg.rut_depth * rng.uniform(0.3, 0.7),
+                     cfg.rut_sigma * rng.uniform(0.6, 1.0), rng.uniform(0, 2 * np.pi),
+                     rng.uniform(3, 7)))
+    return ruts
+
+
+def rut_centre(r, x, cfg):
+    c, _, _, ph, lam = r
+    return c + cfg.rut_wobble * np.sin(2 * np.pi * x / lam + ph)
+
+
+def add_ruts(h, X, Y, cfg, rng=None):
+    """Smooth grooves where cart and van wheels run; optionally meandering, plus
+    shallower extra tracks. Returns (h, rut lines)."""
+    rng = rng or np.random.default_rng(0)
+    ruts = rut_lines(cfg, rng)
+    for r in ruts:
+        h -= r[1] * np.exp(-((Y - rut_centre(r, X, cfg)) ** 2) / (2 * r[2] ** 2))
+    return h, ruts
+
+
+def add_rut_puddles(h, X, Y, cfg, ruts, rng):
+    """Shallow dips along the ruts where rain water stands. Returned in the pothole
+    format, so kacha.water fills them like potholes."""
+    out = []
+    for _ in range(cfg.rut_puddles):
+        r = ruts[rng.integers(len(ruts))]
+        cx = rng.uniform(-cfg.length / 2 + 1.0, cfg.length / 2 - 0.5)
+        cy = rut_centre(r, cx, cfg)
+        rad, dep = rng.uniform(0.15, 0.30), rng.uniform(0.02, 0.05)
+        dist = np.sqrt(((X - cx) / 1.6) ** 2 + (Y - cy) ** 2)      # stretched along the road
+        inside = dist < rad
+        ring = (dist >= rad) & (dist < rad + 2 * cfg.resolution)
+        if not ring.any():
+            continue
+        rim = float(np.min(h[ring]))
+        t = np.clip((rad - dist) / (0.5 * rad), 0.0, 1.0)
+        h -= dep * (t * t * (3 - 2 * t)) * inside
+        out.append({"center": (cx, cy), "radius": rad, "depth": dep, "severity": "rut_puddle",
+                    "rim": rim})
+    return h, out
 
 
 def add_potholes(h, X, Y, cfg, rng):
@@ -110,8 +166,14 @@ def generate_village_road(cfg=None, seed=0):
     X, Y = _grid(cfg)
     h = embankment(X, Y, cfg)
     on_road = np.abs(Y) <= cfg.road_width / 2
-    h = np.where(on_road, add_ruts(h.copy(), Y, cfg), h)
+    # ruts draw from their own generator, so roads from earlier versions (same seed,
+    # default config) keep their pothole positions
+    rutted, ruts = add_ruts(h.copy(), X, Y, cfg, np.random.default_rng([seed, 1]))
+    h = np.where(on_road, rutted, h)
     h, holes = add_potholes(h, X, Y, cfg, rng)
+    if cfg.rut_puddles:
+        h, puddles = add_rut_puddles(h, X, Y, cfg, ruts, rng)
+        holes += puddles
     # surface roughness correlated over ~10 cm (cell-by-cell noise makes tiny spikes,
     # which look wrong and create many contacts per foot)
     h += cfg.roughness * smooth_noise(h.shape, cfg.roughness_scale / cfg.resolution, rng)

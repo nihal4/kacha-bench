@@ -50,13 +50,15 @@ class Water:
         lvl = self.level_at(x, y)
         return ground if lvl is None else max(ground, lvl)
 
-    def add_visuals(self, spec):
-        """Opaque muddy-water discs (visual only, no collision)."""
+    def add_visuals(self, spec, material=None):
+        """Opaque muddy-water discs (visual only, no collision). material: a material
+        name (kacha.look adds a shiny "water" one); otherwise a flat colour."""
         for i, w in enumerate(self.pools):
+            kw = {"material": material} if material else {"rgba": [0.45, 0.36, 0.22, 0.95]}
             spec.worldbody.add_geom(
                 name=f"water_{i}", type=mujoco.mjtGeom.mjGEOM_CYLINDER,
                 size=[w["r"], 0.002, 0], pos=[w["cx"], w["cy"], w["level"] - 0.002],
-                rgba=[0.45, 0.36, 0.22, 0.95], contype=0, conaffinity=0, group=1)
+                contype=0, conaffinity=0, group=1, **kw)
 
 
 def _submerged_cap(a, h):

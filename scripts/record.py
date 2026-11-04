@@ -2,7 +2,8 @@
 
 Usage:
     MUJOCO_GL=egl python scripts/record.py --run runs/go1-none-s0 [--best] [--out video.mp4]
-Each clip ends with a border: green = walked (success), red = fell or stood still.
+Each clip ends with a border: green = success (Go1: walked; G1: reached the end of the
+road), red = fell, left the road or stood still.
 """
 import argparse
 import json
@@ -14,17 +15,22 @@ os.environ.setdefault("MUJOCO_GL", "egl")
 
 TEST_SEEDS = (7, 8, 9)
 MAX_STEPS = 500          # 10 s of walking per clip
+G1_MAX_STEPS = 2000      # g1: the whole road (up to 40 s); success = reached the end
 
 
 def record(run, out, best=False, seeds=TEST_SEEDS):
     import imageio.v2 as imageio
     from stable_baselines3 import PPO
     from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
-    from kacha.walk_env import Go1WalkEnv
-
     cfg = json.load(open(os.path.join(run, "config.json")))
-    mk = lambda: Go1WalkEnv(season=cfg["season"], height_scan=cfg["scan"], seed=0,
-                            reward=cfg.get("reward", "playground"))
+    g1 = cfg.get("robot") == "g1"
+    if g1:
+        from kacha.g1_env import G1MudRoadEnv, env_kwargs_from_config
+        mk = lambda: G1MudRoadEnv(seed=0, look=True, obs_noise=False, **env_kwargs_from_config(cfg))
+    else:
+        from kacha.walk_env import Go1WalkEnv
+        mk = lambda: Go1WalkEnv(season=cfg["season"], height_scan=cfg["scan"], seed=0,
+                                reward=cfg.get("reward", "playground"))
     m_path = os.path.join(run, "best_model.zip" if best else "model.zip")
     v_path = os.path.join(run, "best_vecnormalize.pkl" if best else "vecnormalize.pkl")
     norm = VecNormalize.load(v_path, DummyVecEnv([mk]))
@@ -37,7 +43,7 @@ def record(run, out, best=False, seeds=TEST_SEEDS):
         env = mk()
         obs, _ = env.reset(seed=seed)
         info, frame, done = {}, None, False
-        for t in range(MAX_STEPS):
+        for t in range(G1_MAX_STEPS if g1 else MAX_STEPS):
             a, _ = model.predict(norm.normalize_obs(obs[None]), deterministic=True)
             obs, _, te, tr, info = env.step(a[0])
             done = te or tr
@@ -46,7 +52,7 @@ def record(run, out, best=False, seeds=TEST_SEEDS):
                 writer.append_data(frame)
             if done:
                 break
-        if not done:                                  # clip ended before the episode did
+        if not done and not g1:                       # clip ended before the episode did
             walked = info["distance"] >= 0.5 * env.cmd * (t + 1) * env.dt
             info["is_success"] = walked
         ok = bool(info.get("is_success", False))

@@ -14,12 +14,24 @@ case "${1:-help}" in
     SEASON="$2"; STEPS="${3:-20000000}"; EXTRA="${4:-}"
     case "$SEASON" in none|dry|early_monsoon|peak_monsoon|extreme|mix) ;;
       *) echo "unknown season '$SEASON' (none, dry, early_monsoon, peak_monsoon, extreme, mix)"; exit 1 ;; esac
-    NAME="go1-$SEASON"
-    case "$EXTRA" in *--scan*) NAME="$NAME-scan" ;; esac
-    # reward version is part of the run name, so a v2 job never resumes an older
-    # Playground-reward run (runs/go1-none-s0 stays as it was)
-    case "$EXTRA" in *"--reward playground"*) ;; *) NAME="$NAME-v2" ;; esac
-    SEED=$(echo "$EXTRA" | grep -oE -- '--seed [0-9]+' | awk '{print $2}'); NAME="$NAME-s${SEED:-0}"
+    SEED=$(echo "$EXTRA" | grep -oE -- '--seed [0-9]+' | awk '{print $2}')
+    case "$EXTRA" in
+      *"--robot g1"*)                                              # humanoid, stage 1 road
+        T=""
+        case "$EXTRA" in *--no_reference*) T="$T-noref" ;; esac
+        case "$EXTRA" in *"--assist_frac 0 "*|*"--assist_frac 0") T="$T-noassist" ;; esac
+        case "$EXTRA" in *--scan*) T="$T-scan" ;; esac
+        H=$(echo "$EXTRA" | grep -oE -- '--history [0-9]+' | awk '{print $2}')
+        [ -n "$H" ] && [ "$H" -gt 1 ] && T="$T-h$H"
+        NAME="g1-road-$SEASON$T-s${SEED:-0}" ;;
+      *)
+        NAME="go1-$SEASON"
+        case "$EXTRA" in *--scan*) NAME="$NAME-scan" ;; esac
+        # reward version is part of the run name, so a v2 job never resumes an older
+        # Playground-reward run (runs/go1-none-s0 stays as it was)
+        case "$EXTRA" in *"--reward playground"*) ;; *) NAME="$NAME-v2" ;; esac
+        NAME="$NAME-s${SEED:-0}" ;;
+    esac
     printf 'SEASON=%s\nSTEPS=%s\nEXTRA="%s"\nNAME=%s\n' "$SEASON" "$STEPS" "$EXTRA" "$NAME" > "$JOB"
     echo "job set: $SEASON, $STEPS steps, extra='$EXTRA' -> runs/$NAME  (kacha restart to switch now)" ;;
   start)   $U start kacha-train && echo "started: $("$0" job)" ;;
@@ -56,7 +68,10 @@ kacha job                          show the current job
 kacha job SEASON [STEPS] ["EXTRA"] set the job, e.g.  kacha job none 20000000
                                    seasons: none dry early_monsoon peak_monsoon extreme mix
                                    EXTRA: "--scan" (height scan), "--seed 1",
-                                          "--reward playground" (old reward; default v2)
+                                          "--reward playground" (old Go1 reward; default v2),
+                                          "--robot g1" (humanoid, stage 1 muddy road)
+                                   g1 baselines (add to "--robot g1"): --no_reference,
+                                          "--assist_frac 0", --scan, "--history 5"
 kacha start | stop | restart       control training (after a reboot: kacha start resumes)
 kacha status                       latest progress, eval, speed, CPU temperature
 kacha log [N]                      follow the training log (Ctrl+C to leave; training continues)

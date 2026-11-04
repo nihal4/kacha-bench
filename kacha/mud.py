@@ -225,3 +225,145 @@ class MudContact:
                 if sp > 1e-9:
                     F[:2] = -min(self.c_max[k] * sp, Fh_cap) * vh / sp   # drag in swing
                 mujoco.mj_applyFT(model, data, F, np.zeros(3), pos, b, data.qfrc_applied)
+
+
+# ----------------------------------------------------------- flat feet (humanoids)
+#
+# A humanoid sole is a flat rectangle, not a sphere, so its full area bears from the
+# first millimetre of sinkage. Same soil strength su as above; only the footing
+# geometry changes (docs/mud_physics.md, section "Flat feet").
+
+def rect_bearing_capacity(d, p, B, L, frac=1.0, leg_d=0.07, foot_h=0.04):
+    """(base, sides) forces (N) the mud supports under a flat B x L sole whose bottom is
+    d below the surface. Skempton (1951) for a rectangular footing on clay:
+    Nc = 5 (1 + 0.2 D/B)(1 + 0.2 B/L), with D/B capped at 2.5. frac is the share of
+    the sole touching (heel or toe only during roll-off)."""
+    Nc = 5.0 * (1.0 + 0.2 * min(d / B, 2.5)) * (1.0 + 0.2 * B / L)
+    F_base = Nc * p.su * B * L * frac
+    side = p.alpha * p.su * 2.0 * (B + L) * min(max(d, 0.0), foot_h)     # sole edges
+    side += p.alpha * p.su * np.pi * leg_d * max(d - foot_h, 0.0)          # ankle / shin
+    return F_base, side
+
+
+def rect_lateral_capacity(d, p, B, L):
+    """Sideways resistance (N) of a sole buried d deep: adhesion under the sole plus
+    passive resistance on its front face (Matlock 1970 factor, face width B, the
+    narrow side, which is the one pushed when a walking foot slips forward or back)."""
+    Np = min(3.0 + p.J * (d / 2.0) / B, 9.0)
+    return p.alpha * p.su * B * L + Np * p.su * B * d
+
+
+def rect_punch_stiffness(p, B, L):
+    """Elastic stiffness of a rigid rectangular punch, using the equal-area circle."""
+    return punch_stiffness(p, np.sqrt(B * L / np.pi))
+
+
+def add_flat_mud_plates(spec, feet):
+    """One invisible mocap plate per foot, sized to the sole, colliding only with that
+    foot's contact geoms. feet: {foot_name: [geom names]}. Call before compile."""
+    for k, (foot, geoms) in enumerate(feet.items()):
+        bit = 1 << (k + 1)
+        for gname in geoms:
+            g = spec.geom(gname)
+            g.contype = int(g.contype) | bit
+        body = spec.worldbody.add_body(name=f"plate_{foot}", mocap=True, pos=[0, 0, -10])
+        body.add_geom(name=f"plate_{foot}", type=mujoco.mjtGeom.mjGEOM_BOX,
+                      size=[0.15, 0.08, 0.01], contype=0, conaffinity=bit, priority=5,
+                      friction=[MU_WET_CLAY, 0.02, 0.01], rgba=[0, 0, 0, 0], group=3)
+
+
+class FlatFootMud:
+    """Mud under flat feet. Same scheme as MudContact (a yielding support plate under
+    each foot, plate friction for sideways resistance, explicit suction and swing drag),
+    with the sole geometry of a humanoid. Call apply(model, data) before every mj_step.
+
+    feet: {foot_name: [contact geom names]}, all geoms of one foot on one body."""
+
+    HALF_T = 0.01
+
+    def __init__(self, model, params, surface_fn, feet, leg_d=0.07, foot_h=0.04):
+        self.p, self.surface_fn, self.leg_d, self.foot_h = params, surface_fn, leg_d, foot_h
+        self.names = list(feet)
+        self.geoms = [[model.geom(g).id for g in gs] for gs in feet.values()]
+        self.bodies = [int(model.geom_bodyid[gs[0]]) for gs in self.geoms]
+        self.plates = [model.geom(f"plate_{f}").id for f in self.names]
+        self.mocap = [model.body_mocapid[model.body(f"plate_{f}").id] for f in self.names]
+        # sole size from the contact points (sphere centres plus their radius)
+        self.B, self.L, self.r_pt = [], [], []
+        for gs in self.geoms:
+            pos, r = model.geom_pos[gs], float(model.geom_size[gs[0]][0])
+            self.L.append(float(np.ptp(pos[:, 0]) + 2 * r))
+            self.B.append(float(np.ptp(pos[:, 1]) + 2 * r))
+            self.r_pt.append(r)
+        dt = model.opt.timestep
+        self.c_max = [0.5 * model.body_subtreemass[b] / dt for b in self.bodies]
+        self.filt = dt / (0.02 + dt)
+        self.dz_max = 0.1 * dt
+        n = len(self.names)
+        self.N_avg, self.zp = np.zeros(n), np.zeros(n)
+        self.hole_xy = np.zeros((n, 2))
+        self.sinkage, self.normal, self.touching = np.zeros(n), np.zeros(n), np.zeros(n)
+        self.suction = np.zeros(n)          # downward pull on a lifting foot (N), last step
+        self._f, self._vel = np.zeros(6), np.zeros(6)
+
+    def _plate_contacts(self, model, data, k):
+        N, pts = 0.0, set()
+        for i in range(data.ncon):
+            c = data.contact[i]
+            if self.plates[k] in (c.geom1, c.geom2):
+                mujoco.mj_contactForce(model, data, i, self._f)
+                N += self._f[0]
+                pts.add(c.geom1 if c.geom2 == self.plates[k] else c.geom2)
+        return N, len(pts)
+
+    def apply(self, model, data):
+        data.qfrc_applied[:] = 0.0
+        p = self.p
+        self.suction[:] = 0.0
+        for k in range(len(self.names)):
+            gs, b, B, L = self.geoms[k], self.bodies[k], self.B[k], self.L[k]
+            pts = data.geom_xpos[gs]
+            centre = pts.mean(axis=0)
+            bottom = float(pts[:, 2].min()) - self.r_pt[k]
+            surface = self.surface_fn(centre[0], centre[1])
+            d = surface - bottom
+            self.sinkage[k] = max(d, 0.0)
+            N, n_pts = self._plate_contacts(model, data, k)
+            frac = max(n_pts / len(gs), 0.25)
+            self.N_avg[k] += self.filt * (N - self.N_avg[k])
+            self.normal[k], self.touching[k] = N, n_pts
+            if p.depth <= 0.0:
+                data.mocap_pos[self.mocap[k]] = [centre[0], centre[1], -10.0]
+                continue
+            far = np.linalg.norm(centre[:2] - self.hole_xy[k]) > 0.5 * B
+            if d <= 0.0:
+                self.zp[k], self.hole_xy[k] = 0.0, centre[:2]
+            elif N <= 0.0 and far:
+                self.zp[k], self.hole_xy[k] = min(d, p.depth), centre[:2]
+            if N > 0.0:
+                cap = sum(rect_bearing_capacity(self.zp[k], p, B, L, frac, self.leg_d, self.foot_h))
+                if self.N_avg[k] > cap:
+                    dz = (self.N_avg[k] - cap) / rect_punch_stiffness(p, B, L)
+                    self.zp[k] = min(self.zp[k] + min(dz, self.dz_max), p.depth)
+                self.hole_xy[k] = centre[:2]
+            # plate: flat, under the sole, turned with the foot's heading
+            R = data.xmat[b].reshape(3, 3)
+            yaw = np.arctan2(R[1, 0], R[0, 0])
+            data.mocap_pos[self.mocap[k]] = [centre[0], centre[1], surface - self.zp[k] - self.HALF_T]
+            data.mocap_quat[self.mocap[k]] = [np.cos(yaw / 2), 0, 0, np.sin(yaw / 2)]
+            depth_in = min(max(d, 0.0), p.depth)
+            Fh = rect_lateral_capacity(depth_in, p, B, L)
+            model.geom_friction[self.plates[k], 0] = float(
+                np.clip(max(p.mu_surface, Fh / max(N, 1.0)), p.mu_surface, 2.0))
+            if d > 0.0 and N <= 0.0:           # in the mud, lifting or swinging
+                mujoco.mj_objectVelocity(model, data, mujoco.mjtObj.mjOBJ_BODY, b, self._vel, 0)
+                v, F = self._vel[3:], np.zeros(3)
+                if v[2] > 0.0 and not far:
+                    F_b, side = rect_bearing_capacity(self.zp[k], p, B, L, 1.0, self.leg_d, self.foot_h)
+                    cap = p.beta * F_b * depth_in / max(self.zp[k], 1e-6) + side
+                    F[2] = -min(self.c_max[k] * v[2], cap)                    # suction
+                    self.suction[k] = -F[2]
+                sp = np.linalg.norm(v[:2])
+                if sp > 1e-9:
+                    F[:2] = -min(self.c_max[k] * sp, Fh) * v[:2] / sp          # drag
+                mujoco.mj_applyFT(model, data, F, np.zeros(3), centre, b, data.qfrc_applied)
