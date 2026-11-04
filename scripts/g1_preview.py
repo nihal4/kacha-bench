@@ -1,11 +1,13 @@
-"""Film the G1 on the muddy road with the scripted controller only (no learned policy).
+"""Film the G1 on the muddy road with a non-learned controller.
 
-Shows the reference mud-walking gait, the mud physics and the scene before training.
-With --assist the balance assist used early in training is on.
+--controller scripted (default): the reference mud-walking gait, as the policy's base.
+--controller dcm: the model-based capture-point walking controller (kacha/dcm.py).
+With --assist the balance assist used early in training is on (scripted only).
 
 Usage (headless PC):
     MUJOCO_GL=egl python scripts/g1_preview.py --season peak_monsoon
     MUJOCO_GL=egl python scripts/g1_preview.py --season early_monsoon --assist 1.0 --seconds 15
+    MUJOCO_GL=egl python scripts/g1_preview.py --controller dcm --season dry --road smooth --seconds 20
 """
 import argparse
 import os
@@ -18,6 +20,8 @@ import imageio.v2 as imageio  # noqa: E402
 import numpy as np  # noqa: E402
 
 from kacha.g1_env import G1MudRoadEnv  # noqa: E402
+from kacha.g1_policies import DCM  # noqa: E402
+from kacha.terrain import ROADS  # noqa: E402
 
 
 def main():
@@ -25,19 +29,26 @@ def main():
     ap.add_argument("--season", default="peak_monsoon",
                     choices=["dry", "early_monsoon", "peak_monsoon", "extreme"])
     ap.add_argument("--assist", type=float, default=0.0)
+    ap.add_argument("--controller", default="scripted", choices=["scripted", "dcm"])
+    ap.add_argument("--road", default="rutted", choices=list(ROADS))
     ap.add_argument("--seconds", type=float, default=12.0)
     ap.add_argument("--seed", type=int, default=3)
     ap.add_argument("--out")
     a = ap.parse_args()
-    out = a.out or f"videos/g1_{a.season}{'_assist' if a.assist else ''}.mp4"
+    out = a.out or f"videos/g1_{a.controller}_{a.season}_{a.road}{'_assist' if a.assist else ''}.mp4"
     os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
     env = G1MudRoadEnv(season=a.season, seed=a.seed, look=True, obs_noise=False,
-                       assist=a.assist, max_seconds=a.seconds)
+                       assist=a.assist, max_seconds=a.seconds, road=ROADS[a.road])
     env.reset(seed=a.seed)
+    fn = None
+    if a.controller == "dcm":
+        dcm = DCM()
+        dcm.reset(env)
+        fn = dcm.ctrl_fn
     writer = imageio.get_writer(out, fps=25, macro_block_size=8)
     info, done = {}, False
     while not done:
-        _, _, te, tr, info = env.step(np.zeros(12))
+        _, _, te, tr, info = env.step(np.zeros(12), ctrl_fn=fn)
         done = te or tr
         if env.steps % 2 == 0 or done:
             writer.append_data(env.render())

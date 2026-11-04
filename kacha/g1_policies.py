@@ -2,12 +2,14 @@
 
 Scripted     the scripted mud-walking controller alone (zero corrections)
 Trained      a PPO run from scripts/train.py (final or best checkpoint)
+DCM          the model-based capture-point walking controller (kacha/dcm.py)
 Unitree      Unitree's pretrained G1 walking policy (unitree_rl_gym motion.pt), trained
              on rigid ground. A TorchScript file can run code when loaded: only load
              files from a source you trust.
 
 make_method(spec) builds one from a string: "scripted", "run:PATH", "run-best:PATH",
-"unitree:PATH". run_episode(method, env, seed) plays one episode and returns its metrics.
+"unitree:PATH", "dcm". run_episode(method, env, seed) plays one episode and returns its
+metrics.
 """
 import json
 import os
@@ -93,6 +95,30 @@ class Unitree:
         return a                 # the environment applies default + 0.25 x action
 
 
+class DCM:
+    """Capture-point walking (kacha/dcm.py) at the physics rate, at its own reliable
+    speed (default 0.2 m/s) rather than the episode's command. It starts from its own
+    settled walking crouch, and sets its own joint servo gains (motor torque limits
+    unchanged)."""
+    name = "DCM capture-point controller"
+    env_kw = {}
+
+    def __init__(self, speed=0.2, **params):
+        from .dcm import DCMParams
+        self.speed, self.params = speed, DCMParams(**params)
+
+    def reset(self, env):
+        from .dcm import DCMWalker
+        self.w = DCMWalker(env.model, self.params, surface=env.surface)
+        upper = env.u_ref[12:].copy()
+        self.w.settle(env.data, upper)
+        self.w.reset(env.data, self.speed, upper)
+        self.ctrl_fn = self.w
+
+    def act(self, env, obs):
+        return np.zeros(12)
+
+
 def make_method(spec):
     kind, _, path = spec.partition(":")
     if kind == "scripted":
@@ -101,7 +127,9 @@ def make_method(spec):
         return Trained(path, best=kind == "run-best")
     if kind == "unitree":
         return Unitree(path)
-    raise ValueError(f"unknown method {spec!r} (scripted, run:PATH, run-best:PATH, unitree:PATH)")
+    if kind == "dcm":
+        return DCM(**({"speed": float(path)} if path else {}))
+    raise ValueError(f"unknown method {spec!r} (scripted, dcm[:SPEED], run:PATH, run-best:PATH, unitree:PATH)")
 
 
 def run_episode(method, env, seed):
@@ -110,8 +138,9 @@ def run_episode(method, env, seed):
     obs, _ = env.reset(seed=seed)
     method.reset(env)
     info, done = {}, False
+    fn = getattr(method, "ctrl_fn", None)
     while not done:
-        obs, _, te, tr, info = env.step(method.act(env, obs))
+        obs, _, te, tr, info = env.step(method.act(env, obs), ctrl_fn=fn)
         done = te or tr
     m = dict(info["metrics"])
     m.update(success=bool(info.get("is_success")), fell=bool(info["fell"]),

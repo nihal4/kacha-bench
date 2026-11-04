@@ -38,6 +38,13 @@ class RoadConfig:
     rut_puddles: int = 0          # small water-filled dips along the ruts
 
 
+# Road surfaces for the study: "rutted" (default, the monsoon road) or "smooth" (the same
+# embankment road with no ruts, dips, potholes or surface roughness), to separate the
+# effect of the mud from the effect of the road surface.
+SMOOTH_ROAD = dict(rut_depth=0.0, extra_ruts=0, rut_puddles=0, n_potholes=0, roughness=0.0)
+ROADS = {"rutted": {}, "smooth": SMOOTH_ROAD}
+
+
 def muddy_rut_road(**kw):
     """Preset for a monsoon earthen road torn up by wheels (deep, meandering ruts with
     water standing in them, as in field photos of Bangladeshi village roads). The rut

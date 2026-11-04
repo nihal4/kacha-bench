@@ -31,7 +31,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import numpy as np  # noqa: E402
 
+from kacha.terrain import ROADS  # noqa: E402
+
 SWEEP_SEED = 70_000
+MAX_SECONDS = 60.0      # time to cross the road, the same for every method
 AXES = ("LI", "su_kpa", "depth", "mu", "beta", "fill")
 CAUSES = ("hidden_water", "stuck", "sank", "slipped", "no_trigger")
 GAIT = ("step_length", "cadence_per_min", "double_support", "foot_lift", "stance_sinkage",
@@ -40,13 +43,14 @@ GAIT = ("step_length", "cadence_per_min", "double_support", "foot_lift", "stance
 
 def _job(args):
     """One worker task: a method, one swept value, a block of episodes."""
-    spec, axis, value, base, seeds = args
+    spec, axis, value, base, seeds, road = args
     from kacha.g1_env import G1MudRoadEnv
     from kacha.g1_policies import make_method, run_episode
+    from kacha.terrain import ROADS
     method = make_method(os.path.expanduser(spec) if ":" not in spec else
                          spec.split(":", 1)[0] + ":" + os.path.expanduser(spec.split(":", 1)[1]))
-    env = G1MudRoadEnv(season=base, seed=seeds[0], obs_noise=False, assist=0.0,
-                       mud={axis: value}, **method.env_kw)
+    env = G1MudRoadEnv(season=base, seed=seeds[0], obs_noise=False, assist=0.0, max_seconds=MAX_SECONDS,
+                       mud={axis: value}, road=ROADS[road], **method.env_kw)
     rows = []
     for s in seeds:
         m = run_episode(method, env, s)
@@ -132,9 +136,11 @@ def main():
     ap.add_argument("--axis", required=True, choices=AXES)
     ap.add_argument("--values", type=float, nargs="+", required=True)
     ap.add_argument("--methods", nargs="+", default=["scripted"],
-                    help="scripted, run:PATH, run-best:PATH, unitree:PATH")
+                    help="scripted, dcm, run:PATH, run-best:PATH, unitree:PATH")
     ap.add_argument("--base", default="peak_monsoon",
                     help="season for every property not swept (dry has no mud: give depth)")
+    ap.add_argument("--road", default="rutted", choices=list(ROADS),
+                    help="rutted (the monsoon road) or smooth (no ruts, dips or roughness)")
     ap.add_argument("--episodes", type=int, default=30)
     ap.add_argument("--workers", type=int, default=1)
     ap.add_argument("--out", required=True, help="output path without extension")
@@ -146,7 +152,7 @@ def main():
         for v in a.values:
             seeds = [SWEEP_SEED + k for k in range(a.episodes)]
             for i in range(0, len(seeds), block):
-                jobs.append((spec, a.axis, v, a.base, seeds[i:i + block]))
+                jobs.append((spec, a.axis, v, a.base, seeds[i:i + block], a.road))
     rows = []
     if a.workers > 1:
         with ProcessPoolExecutor(a.workers) as ex:
@@ -165,7 +171,7 @@ def main():
         w.writeheader()
         w.writerows(rows)
     summary = summarise(rows)
-    write_summary(summary, a.axis, a.base, a.episodes, a.out + "_summary.md")
+    write_summary(summary, a.axis, f"{a.base}, {a.road} road", a.episodes, a.out + "_summary.md")
     plot(summary, a.axis, a.out + ".png")
     print(open(a.out + "_summary.md").read())
     print(f"wrote {a.out}.csv, {a.out}_summary.md, {a.out}.png")

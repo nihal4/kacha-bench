@@ -6,6 +6,7 @@ noise, deterministic policies.
 
 Methods:
     --scripted               the scripted mud-walking controller alone (zero corrections)
+    --dcm                    the model-based capture-point controller (kacha/dcm.py)
     --run RUN_DIR [...]      trained runs (final model; --best for the best checkpoint)
     --unitree MOTION_PT      Unitree's pretrained G1 walking policy from unitree_rl_gym
                              (deploy/pre_train/g1/motion.pt), trained on rigid ground.
@@ -28,15 +29,20 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np  # noqa: E402
 
 from kacha.g1_env import G1MudRoadEnv  # noqa: E402
-from kacha.g1_policies import Scripted, Trained, Unitree, run_episode  # noqa: E402
+from kacha.terrain import ROADS  # noqa: E402
+from kacha.g1_policies import DCM, Scripted, Trained, Unitree, run_episode  # noqa: E402
 
 TEST_SEED = 50_000
+# time to cross the 8.3 m road; the same for every method (the DCM controller walks at
+# 0.2 m/s and needs about 45 s)
+MAX_SECONDS = 60.0
 
 
 # ----------------------------------------------------------------------------- evaluation
-def evaluate(method, season, episodes):
+def evaluate(method, season, episodes, road="rutted"):
     rows = []
-    env = G1MudRoadEnv(season=season, seed=TEST_SEED, obs_noise=False, assist=0.0, **method.env_kw)
+    env = G1MudRoadEnv(season=season, seed=TEST_SEED, obs_noise=False, assist=0.0, max_seconds=MAX_SECONDS,
+                       road=ROADS[road], **method.env_kw)
     for k in range(episodes):
         rows.append(run_episode(method, env, TEST_SEED + k))
     env.close()
@@ -54,26 +60,30 @@ def summarise(rows):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--scripted", action="store_true")
+    ap.add_argument("--dcm", action="store_true")
     ap.add_argument("--run", nargs="*", default=[])
     ap.add_argument("--best", action="store_true")
     ap.add_argument("--unitree")
     ap.add_argument("--seasons", nargs="+", default=["dry", "early_monsoon", "peak_monsoon"])
+    ap.add_argument("--road", default="rutted", choices=list(ROADS),
+                    help="rutted (the monsoon road) or smooth (no ruts, dips or roughness)")
     ap.add_argument("--episodes", type=int, default=10)
     ap.add_argument("--out", help="markdown table; a .json with every episode is written next to it")
     a = ap.parse_args()
-    methods = ([Scripted()] if a.scripted else []) + [Trained(r, a.best) for r in a.run] \
+    methods = ([Scripted()] if a.scripted else []) + ([DCM()] if a.dcm else []) \
+        + [Trained(r, a.best) for r in a.run] \
         + ([Unitree(a.unitree)] if a.unitree else [])
     if not methods:
-        ap.error("give at least one of --scripted, --run, --unitree")
+        ap.error("give at least one of --scripted, --dcm, --run, --unitree")
     road = 4.3 - (-4.0)
-    lines = [f"Stage 1 (muddy rutted road, {road:.1f} m), {a.episodes} episodes per season, "
+    lines = [f"Stage 1 ({a.road} road, {road:.1f} m), {a.episodes} episodes per season, "
              f"road seeds {TEST_SEED}+k, no assist, no observation noise.", "",
              "| Method | Season | Success | Fell | Left road | Distance (m) | Time (s) | Fall causes |",
              "|---|---|---|---|---|---|---|---|"]
     detail = {}
     for meth in methods:
         for season in a.seasons:
-            rows = evaluate(meth, season, a.episodes)
+            rows = evaluate(meth, season, a.episodes, a.road)
             s = summarise(rows)
             detail[f"{meth.name} | {season}"] = rows
             line = (f"| {meth.name} | {season} | {100 * s['success']:.0f}% | {100 * s['fell']:.0f}% | "

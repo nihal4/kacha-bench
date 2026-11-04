@@ -207,7 +207,10 @@ class G1MudRoadEnv(gym.Env):
             self.u_ref[:12] = UNITREE_DEFAULT
         return self.u_ref
 
-    def step(self, action):
+    def step(self, action, ctrl_fn=None):
+        """ctrl_fn: optional controller called before every physics step as
+        ctrl_fn(data, dt) -> actuator targets; it replaces the action (model-based
+        baselines such as kacha.dcm run at the physics rate)."""
         a = np.clip(np.asarray(action, dtype=np.float64), -1.0, 1.0)
         m, d = self.model, self.data
         u = self.u_ref.copy()
@@ -224,6 +227,8 @@ class G1MudRoadEnv(gym.Env):
                 self.wforces.apply(m, d)
             if self.assist > 0.0:
                 self._apply_assist()
+            if ctrl_fn is not None:
+                d.ctrl[:] = ctrl_fn(d, m.opt.timestep)
             mujoco.mj_step(m, d)
         self.t += self.control_dt
         self.steps += 1

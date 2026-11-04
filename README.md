@@ -63,7 +63,7 @@ Full plan: [`docs/study.md`](docs/study.md).
 - **Robot:** Unitree G1 humanoid ([`docs/humanoid.md`](docs/humanoid.md)). The Unitree Go1 quadruped was used first to validate the mud and water models.
 - **Conditions:** the muddy rutted road, with one mud property varied at a time (soil wetness, mud depth, friction, suction, water in holes) across its plausible range, so results do not rest on one assumed value per season.
 - **Load (later):** none, a box in both hands, and a load on the head steadied with one hand plus a box in the other, as station porters carry.
-- **Controllers:** Unitree's pretrained rigid-ground policy, the scripted mud gait alone, and PPO policies trained on the dry road, early-monsoon mud, mixed seasons, and with memory, 3 seeds each.
+- **Controllers:** Unitree's pretrained rigid-ground policy, a model-based capture-point (DCM) walking controller, the scripted mud gait alone, and PPO policies trained on the dry road, early-monsoon mud, mixed seasons, and with memory, 3 seeds each.
 - **Measurements:** success with confidence intervals; the trigger of every fall (slip, sinking, suction trap, hidden water, balance loss) and how it fell; gait (step length, cadence, double support, foot lift, sinkage, sliding, cost of transport).
 
 ## Compute plan
@@ -90,7 +90,8 @@ kacha-bench/
 │   ├── g1_scene.py        # Unitree G1 humanoid on the road (contacts, Unitree PD gains)
 │   ├── gait.py            # Scripted mud-walking gait (leg IK) and balance controller
 │   ├── g1_env.py          # Humanoid stage 1: cross the muddy rutted road; failure causes, gait metrics
-│   ├── g1_policies.py     # Controllers for evaluation: scripted, trained, Unitree pretrained
+│   ├── g1_policies.py     # Controllers for evaluation: scripted, DCM, trained, Unitree pretrained
+│   ├── dcm.py             # Model-based capture-point (DCM) walking controller for the G1
 │   ├── look.py            # Sky, sun and shadows, wet clay, water, roadside plants
 │   └── safety.py          # RAM / CPU-temperature guards for long training runs
 ├── scripts/
@@ -144,6 +145,7 @@ python scripts/smoke_test.py --view     # opens the MuJoCo viewer
 - [ ] MJX port and Kaggle training notebook
 - [x] G1 humanoid stage 1 (muddy rutted road): flat-foot mud model, scripted mud-walking gait, residual PPO with balance-assist curriculum (`docs/humanoid.md`)
 - [x] Failure-cause recording, gait metrics and robustness sweeps (`docs/study.md`)
+- [x] Model-based capture-point (DCM) walking baseline: crosses the smooth road in most episodes; first soil-wetness breakdown curve
 - [ ] G1 stage 1 policies trained (dry, early monsoon, mix; 3 seeds each)
 - [ ] Robustness curves and failure mix for stage 1
 - [ ] G1 stage 2 (box in both hands) and stage 3 (head load + hand box)

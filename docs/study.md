@@ -32,6 +32,7 @@ One property at a time, everything else at the base season (`scripts/g1_sweep.py
 | `mu` | surface friction of wet clay | 0.15, 0.2, 0.3, 0.45, 0.6 |
 | `beta` | suction ratio alone | 0, 0.2, 0.4, 0.6 |
 | `fill` | water in potholes and rut dips (hides depth) | 0, 0.5, 1.0 |
+| road | `--road rutted` (the monsoon road) or `--road smooth` (no ruts, dips or roughness) | both |
 | load | none, hand box, head load (and masses) | *(stages 2-3)* |
 
 Because the season values in `docs/mud_physics.md` are assumptions, results are
@@ -47,6 +48,7 @@ Each differs from the main one in one respect. Train each with 3 seeds (`--seed 
 |---|---|---|
 | Unitree pretrained | `unitree:motion.pt` | standard rigid-ground controller |
 | Scripted gait alone | `scripted` | the reference without learning |
+| DCM capture-point controller | `dcm` | classical model-based walking (`docs/humanoid.md`) |
 | PPO, dry road | `kacha job dry 50000000 "--robot g1"` | trained without mud |
 | PPO, early monsoon | `kacha job early_monsoon ...` | trained on slippery mud |
 | PPO, mixed seasons | `kacha job mix ...` | trained on variety |
@@ -89,7 +91,9 @@ All thresholds are heuristics chosen by inspecting traces of the scripted contro
 they should be reported, and a sensitivity check (e.g. halving and doubling each)
 belongs in the paper.
 
-With the scripted controller (no assist), the triggers already separate the
+First results with the DCM controller (smooth road, 15 cm mud): success 100% at LI
+0.6 and 0% from LI 0.75, falls shifting from slips (LI 0.75-0.85) to sinking (LI
+0.9-1.0). With the scripted controller (no assist), the triggers already separate the
 conditions as expected: on the dry road falls are balance failures, in early-monsoon
 mud mostly slips, in peak-monsoon mud sinking (with an occasional suction trap).
 
@@ -115,9 +119,9 @@ python scripts/g1_evaluate.py --scripted --unitree ~/unitree_rl_gym/deploy/pre_t
     --run ~/kacha/runs/g1-road-early_monsoon-s0 --seasons dry early_monsoon peak_monsoon \
     --episodes 30 --out results/seasons.md
 
-# robustness curve over soil wetness
+# robustness curve over soil wetness (add --road smooth to separate mud from ruts)
 python scripts/g1_sweep.py --axis LI --values -0.2 0.2 0.5 0.7 0.9 1.0 1.1 1.2 \
-    --methods scripted run:~/kacha/runs/g1-road-early_monsoon-s0 \
+    --methods dcm scripted run:~/kacha/runs/g1-road-early_monsoon-s0 \
               unitree:~/unitree_rl_gym/deploy/pre_train/g1/motion.pt \
     --base peak_monsoon --episodes 30 --workers 4 --out results/sweep_LI
 ```

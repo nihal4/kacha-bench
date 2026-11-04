@@ -88,6 +88,57 @@ The gains were found by search in simulation: the robot stands indefinitely at U
 gains, and steps for 2-4 s on flat ground before falling. Making it walk unaided was not
 pursued further; the learned policy supplies the rest.
 
+## Model-based baseline: capture-point (DCM) walking
+
+`kacha/dcm.py` is a classical humanoid walking controller, the strong non-learned
+baseline in the study (`--dcm` in `scripts/g1_evaluate.py`, `dcm` in
+`scripts/g1_sweep.py`, `--controller dcm` in `scripts/g1_preview.py`).
+
+| Layer | What it does | Source |
+|---|---|---|
+| ZMP plan | constant under the stance foot in single support (0.50 s), a straight move to the next foot in double support (0.20 s); footsteps 0.27 m apart at the commanded speed, ramped up over 3 steps | Englsberger et al. (2015) |
+| DCM reference | exact solution of the divergent component of motion for each ZMP piece, solved backward from the end of the plan | Englsberger et al. (2015) |
+| Balance | ZMP command r = r_ref + (1 + k/omega)(xi - xi_ref), k = 5, clipped to the sole (single support) or the hull of both soles | Kajita et al. (2003); Englsberger et al. (2015) |
+| Step adjustment | the swing foot is sent to where the DCM will be at touchdown, minus the planned offset, within step limits | Khadiv et al. (2016) |
+| Footholds | the landing point is moved up to 10 cm toward flatter ground; each sole is tilted to the ground slope under it (within the ankle range) | |
+| Forces | the ground force m(g + c_ddot) acting at r is split between the feet; joint torques tau = bias(q, q_dot) - J_c^T lambda from the full rigid-body model | |
+| Posture | IK puts the pelvis at 0.72 m and upright; trunk pitch and roll (300 N m/rad) and heading (100 N m/rad) are held through the stance hips | |
+| Output | the G1's position servos carry the torque as a target offset, u = q_des + tau / kp | |
+
+It uses the true simulator state, so it is an idealised, fully informed controller.
+It sets its own servo gains (hips and knees kp 250, ankles 60) rather than Unitree's
+RL gains; motor torque limits are unchanged. It walks at 0.2 m/s (about 45 s for the
+road), so every method is evaluated with a 60 s limit.
+
+What was needed to make it walk, found by tracing failures in simulation: planning
+around the ankle rather than the sole centre; a double-support phase; starting from a
+settled crouch; stiffer joint tracking than the RL gains; swing-foot position feedback
+solved against the pelvis's real pose; trunk and heading feedback at the stance hips;
+and asking the feet for no twisting moment (asking for any made the stance foot spin
+loose). Gains were then chosen by grid and random search over perturbed starts.
+
+**Results so far** (8.3 m road, 60 s, no assist):
+
+| Road | Season | Crossed |
+|---|---|---|
+| smooth (no ruts or roughness) | dry | 14/16, 7/8, 6/6 in three batches |
+| smooth | early monsoon | 8/8 |
+| smooth | peak monsoon | 0/8 (6 sank, 2 slipped) |
+| smooth, 0.5 cm surface roughness | dry | 0/6 |
+| rutted (the monsoon road) | dry | 0/8 |
+
+Soil-wetness sweep on the smooth road with 15 cm of mud (6 episodes per value):
+success 100% at LI 0.6, 0% from LI 0.75; falls are slips at LI 0.75-0.85 and mostly
+sinking at LI 0.9-1.0; cost of transport rises from 1.0 to 2.7 and steps shorten
+from 0.14 to 0.09 m before the breakdown.
+
+**Limits.** It is sensitive to surface roughness: even 0.5 cm stops it, because each
+step loses a little forward momentum and the lag builds up. Re-planning the speed to
+catch up made the plan jump and was turned off. Its success on long walks is also
+chaotic: tiny numerical differences change single outcomes, so rates need many
+episodes. Contact-based support areas (only the corners touching) were tried and
+removed: contacts flicker and the support area jumped.
+
 ## Stage 1 task
 
 The G1 starts at x = -4 m on a 10 m `muddy_rut_road` (deep, meandering wheel ruts with
@@ -211,8 +262,9 @@ Preview without training: `MUJOCO_GL=egl python scripts/g1_preview.py --season p
 
 ## Open questions
 
-1. The scripted controller alone falls after 2-4 s; a stronger scripted baseline would
-   make the benchmark's baseline table more informative.
+1. The scripted controller alone falls after 2-4 s; the DCM controller is the strong
+   non-learned baseline. Using the DCM controller as the base for the learned policy
+   (instead of the scripted gait) is the obvious next step for training.
 2. Box mass for stages 2-3 must respect the G1 arm rating (about 2 kg basic, 3 kg EDU,
    per arm, Unitree specifications); a head load goes through the legs and can be heavier.
 3. Hands for stages 2-3: palms only (29 actuators) or three-finger hands (43).
@@ -221,6 +273,9 @@ Preview without training: `MUJOCO_GL=egl python scripts/g1_preview.py --season p
 
 - Cham, R. & Redfern, M. S. (2002). Changes in gait when anticipating slippery floors. *Gait & Posture* 15(2).
 - Gates, D. H., Wilken, J. M., Scott, S. J., Sinitski, E. H. & Dingwell, J. B. (2012). Kinematic strategies for walking across a destabilizing rock surface. *Gait & Posture* 35(1).
+- Englsberger, J., Ott, C. & Albu-Schäffer, A. (2015). Three-dimensional bipedal walking control based on divergent component of motion. *IEEE Transactions on Robotics* 31(2).
+- Kajita, S. et al. (2003). Biped walking pattern generation by using preview control of zero-moment point. *IEEE ICRA*.
+- Khadiv, M., Herzog, A., Moosavian, S. A. A. & Righetti, L. (2016). Step timing adjustment: a step toward generating robust gaits. *IEEE-RAS Humanoids*.
 - Raibert, M. H. (1986). *Legged Robots That Balance*. MIT Press.
 - Skempton, A. W. (1951). The bearing capacity of clays. *Building Research Congress*.
 - Matlock, H. (1970). Correlations for design of laterally loaded piles in soft clay. *OTC*.
