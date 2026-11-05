@@ -166,13 +166,20 @@ Each step has a "done when" line. Do one at a time and record the result here.
    (the 0.85 point was a 60 s timeout for run 2, so consider reporting distance and falls
    separately from success); then seeds 1 and 2 of the run 3 configuration.
 1e. Attribute the gain to memory: a matched no-memory run (`--history 1 --wet_start 0.5`, 3M
-   steps, same seeds). Optional: `--history 10`. Later: randomise mud depth, cap the
-   curriculum (`--wet_max`, not implemented yet), keep periodic checkpoints and evaluate at
-   mixed wetness during training (not implemented yet).
-1f. Dry ground: run 3 fails the dry season (0%, DCM 65%). Decide whether the baseline must
-   also work there (it is the reference for normal conditions). Options: extend the training
-   range to LI below 0.5 and randomise mud depth including no mud layer (code change), or
-   report the dry result as a known limit. Also investigate why DCM itself is only 65% in dry.
+   steps, same seeds). Optional: `--history 10`. Implemented 2026-11-06 (tested by a short
+   smoke run, not yet by a full run): `--wet_max LI` (curriculum ceiling), `--dr` with
+   `--dry_share` and `--depth_range` (per-road mud depth, including none), and
+   `--snapshot_every` (policy copies in `RUN/snapshots/`, usable as `run:PATH`). Not yet
+   implemented: evaluating at mixed wetness during training.
+1f. Dry ground: run 3 fails the dry season (0%, DCM 65%). The baseline should also work
+   there (it is the reference for normal conditions). Next run: domain-randomised training
+   `--wet_start 0.4 --wet_max 0.85 --dr --history 5` (3M steps), then the season tables
+   (dry should recover toward DCM's 65% or better) and the LI sweep (100% from 0.5 to 0.8
+   should be kept). Also investigate why DCM itself is only 65% in dry, and re-run the dry
+   comparison with 100 roads. Rough estimate (not validated): the sole's bearing capacity
+   falls below body weight at about LI 0.86, so LI 1.00 (peak monsoon as defined) is probably
+   a physical limit for this foot; decide whether to redefine peak monsoon (for example
+   LI 0.85) or report LI 1.00 as that limit.
 2. Freeze the scope in one paragraph (smooth road and soil wetness as the main study; rutted
    road as future work unless step 6 gives a baseline).
 3. Assumption register: complete the table in section 8 with source and effect for every

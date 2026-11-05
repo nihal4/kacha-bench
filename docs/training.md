@@ -115,3 +115,24 @@ kacha update                # pull new code
 
 Dashboard: `http://<pc>:8081` (curves, live numbers, progress videos every 500k steps).
 It runs next to the fly-brain dashboard on 8080 without conflict.
+
+## G1 training options (stage 1)
+
+- `--base dcm`: PPO corrects the DCM capture-point controller. `--history N`: the policy sees
+  the last N observations (a simple memory).
+- `--wet_start LI`: soil-wetness curriculum. Training starts at this liquidity index and rises by 0.05
+  whenever 60% of recent training episodes succeed; each road's wetness is drawn between
+  `--wet_start` and the current level. `--wet_max LI` caps the curriculum (default: the season's LI,
+  1.00 for peak monsoon, which nothing crosses; 0.85 is a reasonable ceiling).
+- `--dr`: domain randomisation of the mud layer. Each training road gets a mud depth drawn from
+  `--depth_range LO HI` (default 0.04 0.15 m), or no mud layer (dry ground) with probability
+  `--dry_share` (default 0.25). Needs `--wet_start`. Run names get `-dr` and `-max<LI>` tags.
+- `--snapshot_every STEPS` (default 500000, 0 = off): copies the policy to `RUN/snapshots/step_N/`
+  (model, normalisation, config). A snapshot folder works as `--methods run:PATH` in `g1_sweep.py`
+  and `g1_evaluate.py`, so an earlier policy can be recovered if later training gets worse.
+
+Example (the next baseline run, see `docs/status_and_plan.md`):
+
+```
+kacha job peak_monsoon 3000000 "--robot g1 --base dcm --road smooth --wet_start 0.4 --wet_max 0.85 --dr --history 5 --then-evaluate"
+```

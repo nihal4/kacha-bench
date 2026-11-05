@@ -72,7 +72,22 @@ def parse():
                          "up to the season's own LI (each road between the start and the level). Evaluation always uses the season.")
     ap.add_argument("--history", type=int, default=1,
                     help="g1: number of past observations in the input (simple memory)")
+    ap.add_argument("--dr", action="store_true",
+                    help="g1: domain randomisation of the mud layer: each training road gets a mud "
+                         "depth drawn from --depth_range, or none (dry ground) with probability "
+                         "--dry_share. Needs --wet_start (wetness still follows the curriculum)")
+    ap.add_argument("--dry_share", type=float, default=0.25,
+                    help="with --dr: share of training roads with no mud layer (dry ground)")
+    ap.add_argument("--depth_range", type=float, nargs=2, default=[0.04, 0.15], metavar=("LO", "HI"),
+                    help="with --dr: mud depth range in metres")
+    ap.add_argument("--wet_max", type=float, default=None, metavar="LI",
+                    help="g1: ceiling of the wetness curriculum (default: the season's own LI)")
+    ap.add_argument("--snapshot_every", type=int, default=500_000, metavar="STEPS",
+                    help="keep a copy of the policy in RUN/snapshots/ every STEPS steps (0 = off); "
+                         "each snapshot folder works as a --methods run:PATH argument")
     args = ap.parse_args()
+    if args.dr and args.wet_start is None:
+        ap.error("--dr needs --wet_start")
     if args.assist_frac is None:
         args.assist_frac = 0.0 if args.base == "dcm" else 0.4
     cfg = dict(PROFILES[args.profile])
@@ -86,6 +101,7 @@ def parse():
             tags = ("-noref" if args.no_reference else "") + ("-noassist" if args.assist_frac <= 0 else "")
         tags += ("-smooth" if args.road == "smooth" else "")
         tags += (f"-wet{args.wet_start:g}" if args.wet_start is not None else "")
+        tags += ("-dr" if args.dr else "") + (f"-max{args.wet_max:g}" if args.wet_max is not None else "")
         tags += ("-scan" if args.scan else "") + (f"-h{args.history}" if args.history > 1 else "")
         args.name = args.name or f"g1-road-{args.season}{tags}-s{args.seed}"
     else:
@@ -154,7 +170,10 @@ def main():
               "assist_mode": args.assist_mode if g1 else "",
               "g1_reference": not args.no_reference, "g1_history": args.history,
               "g1_base": args.base if g1 else "", "g1_road": args.road if g1 else "",
-              "g1_wet_start": args.wet_start if g1 else None, **cfg}
+              "g1_wet_start": args.wet_start if g1 else None,
+              "g1_dr": bool(args.dr and g1), "g1_wet_max": args.wet_max if g1 else None,
+              "g1_dr_dry_share": args.dry_share if args.dr else None,
+              "g1_dr_depth_range": list(args.depth_range) if args.dr else None, **cfg}
     if not (args.resume and os.path.exists(cfg_file)):
         json.dump(config, open(cfg_file, "w"), indent=2)
 
@@ -315,6 +334,8 @@ def main():
     assist_now = [1.0 if use_assist else 0.0]
 
     WET_STEP, WET_GOAL, WET_EVERY = 0.05, 0.6, 50_000
+    dr_kw = (dict(depth_lo=args.depth_range[0], depth_hi=args.depth_range[1], p_dry=args.dry_share)
+             if args.dr else {})
 
     class Wetness(BaseCallback):
         """Soil-wetness curriculum (g1): every 50k steps, raise the training mud's liquidity
@@ -327,7 +348,8 @@ def main():
         def __init__(self):
             super().__init__()
             from kacha.mud import SEASONS
-            self.target = SEASONS.get(args.season, {}).get("LI", args.wet_start)
+            self.target = (args.wet_max if args.wet_max is not None
+                           else SEASONS.get(args.season, {}).get("LI", args.wet_start))
             self.level, self.last_check, self.sent = args.wet_start, 0, None
             if resumed and os.path.exists(self.STATE):
                 st = json.load(open(self.STATE))
@@ -345,7 +367,7 @@ def main():
             if self.sent != self.level:
                 # each training road gets a wetness between the start and the level, so
                 # the policy keeps practising easier mud (without this it forgot LI 0.7)
-                self.model.get_env().env_method("set_mud", LI=self.level, LI_lo=args.wet_start)
+                self.model.get_env().env_method("set_mud", LI=self.level, LI_lo=args.wet_start, **dr_kw)
                 self.sent = self.level
                 tmp = self.STATE + ".tmp"
                 json.dump({"LI": self.level, "target": self.target, "last_check": self.last_check,
@@ -377,12 +399,27 @@ def main():
             print(line, flush=True)
             return True
 
+    def snapshot():
+        import shutil
+        d = os.path.join(out, "snapshots", f"step_{model.num_timesteps:09d}")
+        os.makedirs(d, exist_ok=True)
+        model.save(os.path.join(d, "model.zip"))
+        model.get_vec_normalize_env().save(os.path.join(d, "vecnormalize.pkl"))
+        shutil.copy2(cfg_file, os.path.join(d, "config.json"))
+
+    class Snapshot(BaseCallback):
+        def _on_step(self):
+            snapshot()
+            return True
+
     safety = SafetyCallback(save, max_minutes=cfg["max_minutes"])
     every = 50_000 if cfg["total_steps"] > 100_000 else cfg["n_steps"] * cfg["n_envs"]
     callbacks = CallbackList([SyncNorm(), eval_cb] + ([Assist()] if use_assist else [])
                              + ([Wetness()] if use_wet else []) + [
                               EveryNTimesteps(n_steps=every, callback=Save()),
-                              EveryNTimesteps(n_steps=every, callback=Progress()), safety])
+                              EveryNTimesteps(n_steps=every, callback=Progress()), safety]
+                             + ([EveryNTimesteps(n_steps=args.snapshot_every, callback=Snapshot())]
+                                if args.snapshot_every > 0 else []))
 
     remaining = max(cfg["total_steps"] - model.num_timesteps, 0)
     print(f"[train] {args.name}: robot {args.robot}, season {args.season}, height scan {args.scan}, "

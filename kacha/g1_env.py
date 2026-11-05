@@ -73,7 +73,9 @@ class G1MudRoadEnv(gym.Env):
                  mud=None, base="scripted", render_mode=None):
         # mud: overrides for robustness sweeps, applied on top of the season:
         #   LI (sets strength and suction together), su_kpa, depth (m), beta (suction
-        #   ratio), mu (surface friction), fill (share of each hole filled with water)
+        #   ratio), mu (surface friction), fill (share of each hole filled with water);
+        #   depth_hi (with depth_lo, p_dry): domain randomisation, each road gets a depth drawn
+        #   uniformly from [depth_lo, depth_hi], or none (dry ground) with probability p_dry
         self.mud_override = dict(mud or {})
         self._mud_changed = False
         if base not in ("scripted", "dcm"):
@@ -148,7 +150,11 @@ class G1MudRoadEnv(gym.Env):
         LI = o.get("LI", base["LI"])
         if "LI_lo" in o and LI > o["LI_lo"]:   # curriculum: each road at a wetness up to LI
             LI = float(self.rng.uniform(o["LI_lo"], LI))
-        depth = o.get("depth", base["depth"])
+        if "depth_hi" in o:                    # domain randomisation: depth varies per road
+            depth = 0.0 if self.rng.random() < o.get("p_dry", 0.0) else \
+                float(self.rng.uniform(o.get("depth_lo", 0.04), o["depth_hi"]))
+        else:
+            depth = o.get("depth", base["depth"])
         if depth <= 0:
             return None, 0.0
         su = o["su_kpa"] * 1e3 if "su_kpa" in o else shear_strength(LI)
