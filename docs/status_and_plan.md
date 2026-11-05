@@ -30,8 +30,15 @@ Supported by the data so far (smooth road, 20 test roads per point, one simulato
   0.5 to 0.7 where DCM gets 100%, and 0% at LI 0.9 and 1.0 (run 1, no memory).
 - With a 5-step observation history (run 2, one seed, 3M steps) the policy crosses 100% at LI
   0.6, 0.65, 0.75 and 0.8 and 70% at 0.7, so the breakdown moves from LI 0.70 to somewhere
-  between 0.8 and 0.9 (0.85 not yet tested). It gets 0% at LI 0.5 (outside its training
-  range, which starts at 0.7) and 0% at 0.9 and 1.0.
+  between 0.82 and 0.87: 100% at 0.82; at 0.85 nobody falls but the robot is too slow to finish
+  in 60 s (7.81 of 8.3 m); falls start at 0.87 (60%) and are universal at 0.9 and 1.0. Its
+  lower limit is sharp: 0% at LI 0.4, 0.45, 0.5 and 0.55, 100% at 0.6, just below its training
+  range (which starts at 0.7). DCM alone is 100% at 0.4 to 0.7 and 0% from 0.75.
+- Run 3 (memory, trained from LI 0.5 with `--wet_start 0.5`, one seed): 100% at LI 0.5, 0.6,
+  0.65, 0.7, 0.75 and 0.8 and 0% at 0.9 and 1.0 (0.85 not tested yet). It covers all of
+  DCM's range and extends beyond it to at least 0.8, and it removed run 2's LI 0.5 failure.
+  Runs 2 and 3 differ mainly in the start of the training range, so this is close to a
+  matched comparison, but each has one seed.
 
 Not supported, do not claim:
 
@@ -65,6 +72,10 @@ setup as run 1 with `--history 5`, 3M steps. Smooth-road LI sweep: 100% at LI 0.
 0.8; 70% at 0.7; 0% at 0.5, 0.9 and 1.0. See `results/stage1_dcm_ppo_run2_memory.md`. Its
 rutted-road and season tables are not copied into the repo yet.
 
+Run 3 finished (2026-11-06): `g1-road-peak_monsoon-dcm-smooth-wet0.5-h5-s0`, run 2 with the
+curriculum starting at LI 0.5. Smooth-road sweep: 100% at LI 0.5, 0.6, 0.65, 0.7, 0.75, 0.8;
+0% at 0.9 and 1.0. See `results/stage1_dcm_ppo_run3_wet05.md`.
+
 Nothing is running now.
 
 Not done: see the plan, section 6.
@@ -89,6 +100,8 @@ Run 2 (memory, `--history 5`, 3M steps, one seed), same sweep (full table in
 `results/stage1_dcm_ppo_run2_memory.md`): LI 0.5 0%, 0.6 100%, 0.65 100%, 0.7 70% (48-85),
 0.75 100%, 0.8 100%, 0.9 0%, 1.0 0%. The upper limit moved from LI 0.70 (DCM) to between 0.8
 and 0.9; the narrow band of run 1 is gone; LI 0.5 fails (slips; outside the training range).
+Finer sweep (same file): 0% at 0.4, 0.45, 0.55; 100% at 0.82; 0.85 has no falls but only
+7.81 of 8.3 m in 60 s (a timeout); 60% falls at 0.87; DCM is 100% at 0.4 to 0.55 and 0% at 0.82 to 0.9.
 
 Season tables, smooth road (20 episodes), run 1: DCM dry 65%, early monsoon 100%, peak monsoon
 0%; scripted gait 0% in all three; trained policy 0% / 5% / 0%.
@@ -121,8 +134,8 @@ the sweep rows, so compare only sweep rows with sweep rows.
    it works only in a narrow LI band. Run 2 (`--history 5`) widened the band to LI 0.6-0.8, which
    fits the hypothesis, but it is one seed and not a matched comparison (section 2).
 5b. **LI 0.5 fails for the memory policy** (slips, 20% leave the road) though DCM crosses it.
-   **Hypothesis:** the training range starts at LI 0.7, so 0.5 is outside it. Test with
-   `--wet_start 0.5`.
+   Run 3 (`--wet_start 0.5`) removed it (100% at LI 0.5 to 0.8, one seed), so this was a
+   training-range effect.
 6. **No working baseline on the rutted road.** Failures there cannot be attributed to
    mud. Needs a geometry ladder (section 6, step 6).
 7. **DCM dry season is 65% on the smooth road but 100% at LI 0.5 with mud.** Unexplained
@@ -141,9 +154,17 @@ Each step has a "done when" line. Do one at a time and record the result here.
 1b. Make the memory result trustworthy. Done when there are at least 3 seeds of the memory
    policy (`--seed 1`, `--seed 2`, 3M steps each, about 2.5 h each) and a matched no-memory
    run at 3M steps with the same seeds, compared with intervals across seeds.
-1c. Find where the memory policy really breaks: finer LI sweep at 0.82, 0.85, 0.87, 0.9, and
-   at 0.4, 0.45, 0.55 on the firm side. Run `--wet_start 0.5` to test whether the LI 0.5
-   failure is a training-range effect.
+1c. DONE for run 2: finer LI sweep (0% at 0.4 to 0.55, 100% at 0.82, 0.85 is a timeout, falls
+   from 0.87). DONE: `--wet_start 0.5` (run 3) fixed the LI 0.5 failure.
+1d. Better baseline first, before the robustness tests. Target: one controller with at least
+   90% success at every LI from 0.5 to 0.85 on the smooth road, over 3 seeds. Run 3 is at 100%
+   from 0.5 to 0.8 (one seed). Remaining: fine sweep of run 3 at 0.4, 0.45, 0.82, 0.85, 0.87
+   (the 0.85 point was a 60 s timeout for run 2, so consider reporting distance and falls
+   separately from success); then seeds 1 and 2 of the run 3 configuration.
+1e. Attribute the gain to memory: a matched no-memory run (`--history 1 --wet_start 0.5`, 3M
+   steps, same seeds). Optional: `--history 10`. Later: randomise mud depth, cap the
+   curriculum (`--wet_max`, not implemented yet), keep periodic checkpoints and evaluate at
+   mixed wetness during training (not implemented yet).
 2. Freeze the scope in one paragraph (smooth road and soil wetness as the main study; rutted
    road as future work unless step 6 gives a baseline).
 3. Assumption register: complete the table in section 8 with source and effect for every
@@ -190,6 +211,8 @@ Commands used so far:
 kacha job peak_monsoon 50000000 "--robot g1 --base dcm --road smooth --wet_start 0.7 --then-evaluate"
 # run 2 (memory)
 kacha job peak_monsoon 3000000 "--robot g1 --base dcm --road smooth --wet_start 0.7 --history 5 --then-evaluate"
+# run 3 (memory, training range from LI 0.5)
+kacha job peak_monsoon 3000000 "--robot g1 --base dcm --road smooth --wet_start 0.5 --history 5 --then-evaluate"
 ```
 
 - The season only sets the curriculum ceiling (peak_monsoon = LI 1.00, depth 15 cm). The

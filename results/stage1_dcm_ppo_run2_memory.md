@@ -64,3 +64,35 @@ same job; add them here when copied from the PC (`results/seasons_*.md`, `result
 
 The two runs differ in more than the history length (steps trained, curriculum speed) and each
 has one seed, so the difference is not yet attributable to memory.
+
+## Finer soil-wetness sweep, smooth road (run 2 policy)
+
+Same settings as above (base season peak_monsoon, 20 episodes per LI, road seeds 70000+k),
+run on the PC after training on 2026-11-05. Command: `g1_sweep.py --axis LI --values 0.4 0.45
+0.55 0.82 0.85 0.87 0.9 --methods dcm run:<run> --base peak_monsoon --road smooth --episodes 20
+--workers 4`. Output: `results/sweep_LI_fine_smooth_summary.md` on the PC.
+
+| Method | LI | Success (95% CI) | Fell | Left road | Distance (m) | stuck | sank | slipped | Cost of transport |
+|---|---|---|---|---|---|---|---|---|---|
+| DCM | 0.4 | 100% (84-100) | 0% | 0% | 8.30 | 0% | 0% | 0% | 0.87 |
+| DCM | 0.45 | 100% (84-100) | 0% | 0% | 8.30 | 0% | 0% | 0% | 0.88 |
+| DCM | 0.55 | 100% (84-100) | 0% | 0% | 8.30 | 0% | 0% | 0% | 0.90 |
+| DCM | 0.82 | 0% (0-16) | 100% | 0% | -0.06 | 15% | 0% | 85% | 12.83 |
+| DCM | 0.85 | 0% (0-16) | 100% | 0% | -0.28 | 0% | 0% | 100% | - |
+| DCM | 0.87 | 0% (0-16) | 100% | 0% | -0.23 | 5% | 0% | 95% | - |
+| DCM | 0.9 | 0% (0-16) | 100% | 0% | -0.15 | 0% | 60% | 40% | - |
+| run 2 (memory) | 0.4 | 0% (0-16) | 85% | 15% | 1.61 | 0% | 0% | 100% | 2.60 |
+| run 2 (memory) | 0.45 | 0% (0-16) | 100% | 0% | 0.77 | 5% | 5% | 90% | 6.85 |
+| run 2 (memory) | 0.55 | 0% (0-16) | 95% | 5% | 2.59 | 0% | 0% | 100% | 2.58 |
+| run 2 (memory) | 0.82 | 100% (84-100) | 0% | 0% | 8.30 | 0% | 0% | 0% | 1.51 |
+| run 2 (memory) | 0.85 | 0% (0-16) | **0%** | 0% | 7.81 | 0% | 0% | 0% | 1.90 |
+| run 2 (memory) | 0.87 | 0% (0-16) | 60% | 0% | 2.76 | 17% | 0% | 83% | 3.88 |
+| run 2 (memory) | 0.9 | 0% (0-16) | 100% | 0% | -0.13 | 5% | 50% | 45% | - |
+
+Reading, together with the first sweep:
+
+- Lower limit of the memory policy: 0% at LI 0.4, 0.45, 0.5, 0.55 and 100% at 0.6. It is a sharp edge about 0.1 below the start of its training range (0.7).
+- Upper limit: 100% at LI 0.82. At LI 0.85 no run fell and none left the road, but none reached the end
+  (average 7.81 of 8.3 m before the 60 s limit), so the failure there is speed, not balance.
+  Falls start at LI 0.87 (60%) and are universal at 0.9.
+- DCM alone: 100% up to LI 0.70 (including 0.4 to 0.55) and 0% from 0.75 (0.82 to 0.9 all falls).
