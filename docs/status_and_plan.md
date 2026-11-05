@@ -27,11 +27,20 @@ Supported by the data so far (smooth road, 20 test roads per point, one simulato
   from 0.9 up they are mostly sinking.
 - A PPO policy trained on top of DCM with a soil-wetness curriculum (one seed, 7.65M steps)
   crosses 40% at LI 0.75 and 100% at LI 0.80, where DCM alone gets 0%, but it gets 0% at LI
-  0.5 to 0.7 where DCM gets 100%, and 0% at LI 0.9 and 1.0.
+  0.5 to 0.7 where DCM gets 100%, and 0% at LI 0.9 and 1.0 (run 1, no memory).
+- With a 5-step observation history (run 2, one seed, 3M steps) the policy crosses 100% at LI
+  0.6, 0.65, 0.75 and 0.8 and 70% at 0.7, so the breakdown moves from LI 0.70 to somewhere
+  between 0.8 and 0.9 (0.85 not yet tested). It gets 0% at LI 0.5 (outside its training
+  range, which starts at 0.7) and 0% at 0.9 and 1.0.
 
 Not supported, do not claim:
 
-- "PPO extends the breakdown point." It works in a narrow band and is worse elsewhere.
+- "Memory is what fixed it." Run 2 differs from run 1 in more than the history (3M against
+  7.65M steps, curriculum speed) and each has one seed. Needs a matched no-memory run at 3M
+  steps and more seeds of both.
+- "PPO extends the breakdown point" as a general statement: it is one seed in one condition
+  (smooth road, 15 cm mud), and run 1 showed a narrow-band policy that was worse than DCM
+  outside the band.
 - Anything about the rutted road: DCM, the scripted gait and the trained policy all get 0%
   there at every wetness, even at LI 0.5, so no reference condition exists on that road.
 - Anything about real mud. The season values and several geometry values are assumptions
@@ -51,12 +60,12 @@ Done:
 - DCM breakdown curve on the smooth road (20 roads per point).
 - First full PPO-on-DCM run (run 1) and its evaluation: `results/stage1_dcm_ppo_run1.md`.
 
-Running now (as of about 18:00 Dhaka time, 2026-11-05):
+Run 2 (memory test) finished on 2026-11-05: `g1-road-peak_monsoon-dcm-smooth-wet0.7-h5-s0`, same
+setup as run 1 with `--history 5`, 3M steps. Smooth-road LI sweep: 100% at LI 0.6, 0.65, 0.75,
+0.8; 70% at 0.7; 0% at 0.5, 0.9 and 1.0. See `results/stage1_dcm_ppo_run2_memory.md`. Its
+rutted-road and season tables are not copied into the repo yet.
 
-- Run 2, memory test: `g1-road-peak_monsoon-dcm-smooth-wet0.7-h5-s0`, same setup as run 1 with
-  `--history 5`, 3,000,000 steps, then the automatic evaluation (about 19:15 expected).
-  Question: does a policy that sees its recent past (and can infer the soil) fix the narrow
-  band? Judge it only by the LI sweep on the smooth road, not by training numbers.
+Nothing is running now.
 
 Not done: see the plan, section 6.
 
@@ -76,7 +85,12 @@ peak monsoon (mud depth 15 cm), 20 episodes per value, 95% Wilson intervals:
 | 0.9 | 0% (sank 60%, slipped 40%) | 0% (slipped 95%) |
 | 1.0 | 0% (sank 75%) | 0% (sank 100%) |
 
-Season tables, smooth road (20 episodes): DCM dry 65%, early monsoon 100%, peak monsoon
+Run 2 (memory, `--history 5`, 3M steps, one seed), same sweep (full table in
+`results/stage1_dcm_ppo_run2_memory.md`): LI 0.5 0%, 0.6 100%, 0.65 100%, 0.7 70% (48-85),
+0.75 100%, 0.8 100%, 0.9 0%, 1.0 0%. The upper limit moved from LI 0.70 (DCM) to between 0.8
+and 0.9; the narrow band of run 1 is gone; LI 0.5 fails (slips; outside the training range).
+
+Season tables, smooth road (20 episodes), run 1: DCM dry 65%, early monsoon 100%, peak monsoon
 0%; scripted gait 0% in all three; trained policy 0% / 5% / 0%.
 
 Rutted road: 0% for every method in every season and at every LI from 0.5 to 1.0.
@@ -104,7 +118,11 @@ the sweep rows, so compare only sweep rows with sweep rows.
    performs badly in dry (0%) and early-monsoon (5%) season tables, where depth is 0 and 8 cm.
    **Hypothesis:** it never saw those conditions.
 5. **Policy has no wetness observation and no memory in run 1.** **Hypothesis:** this is why
-   it works only in a narrow LI band. Run 2 (`--history 5`) tests this.
+   it works only in a narrow LI band. Run 2 (`--history 5`) widened the band to LI 0.6-0.8, which
+   fits the hypothesis, but it is one seed and not a matched comparison (section 2).
+5b. **LI 0.5 fails for the memory policy** (slips, 20% leave the road) though DCM crosses it.
+   **Hypothesis:** the training range starts at LI 0.7, so 0.5 is outside it. Test with
+   `--wet_start 0.5`.
 6. **No working baseline on the rutted road.** Failures there cannot be attributed to
    mud. Needs a geometry ladder (section 6, step 6).
 7. **DCM dry season is 65% on the smooth road but 100% at LI 0.5 with mud.** Unexplained
@@ -119,8 +137,13 @@ the sweep rows, so compare only sweep rows with sweep rows.
 
 Each step has a "done when" line. Do one at a time and record the result here.
 
-1. Finish run 2 (memory). Done when its LI sweep on the smooth road is compared with run 1
-   in `results/`, and the claim about learning is decided.
+1. DONE: run 2 (memory) finished and compared with run 1 (`results/stage1_dcm_ppo_run2_memory.md`).
+1b. Make the memory result trustworthy. Done when there are at least 3 seeds of the memory
+   policy (`--seed 1`, `--seed 2`, 3M steps each, about 2.5 h each) and a matched no-memory
+   run at 3M steps with the same seeds, compared with intervals across seeds.
+1c. Find where the memory policy really breaks: finer LI sweep at 0.82, 0.85, 0.87, 0.9, and
+   at 0.4, 0.45, 0.55 on the firm side. Run `--wet_start 0.5` to test whether the LI 0.5
+   failure is a training-range effect.
 2. Freeze the scope in one paragraph (smooth road and soil wetness as the main study; rutted
    road as future work unless step 6 gives a baseline).
 3. Assumption register: complete the table in section 8 with source and effect for every
