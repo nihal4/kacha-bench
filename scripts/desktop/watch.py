@@ -233,11 +233,41 @@ class Dashboard:
                   "ram_free_gb": ram_free_gb(), "service": service_state(),
                   "job": {"name": active, "season": job.get("SEASON"),
                           "steps_total": _num(job.get("STEPS", "0") or "0"), "extra": job.get("EXTRA", "")},
-                  "live": live, "events": events, "runs": infos}
+                  "live": live, "events": events, "runs": infos,
+                  "results": results_info(self.root)}
         tmp = os.path.join(self.root, "status.json.tmp")
         with open(tmp, "w") as f:
             json.dump(_clean(status), f, separators=(",", ":"), allow_nan=False)
         os.replace(tmp, os.path.join(self.root, "status.json"))
+
+
+def results_info(root):
+    """Result tables and plots for the dashboard's Results section: every run's
+    results/ folder (written by --then-evaluate) and the repository's results/ folder
+    (sweeps and tables run by hand). Image paths are relative to the served root."""
+    groups = []
+    dirs = [(os.path.basename(os.path.dirname(d)), d)
+            for d in glob.glob(os.path.join(root, "runs", "*", "results"))]
+    dirs.append(("hand-run results (repo/results)", os.path.join(root, "repo", "results")))
+    for title, d in dirs:
+        if not os.path.isdir(d):
+            continue
+        items = []
+        for f in sorted(glob.glob(os.path.join(d, "*.md")) + glob.glob(os.path.join(d, "*.png")),
+                        key=os.path.getmtime, reverse=True):
+            item = {"name": os.path.basename(f), "updated": os.path.getmtime(f)}
+            if f.endswith(".md"):
+                try:
+                    item["text"] = open(f).read()[:20000]
+                except OSError:
+                    continue
+            else:
+                item["img"] = os.path.relpath(f, root)
+            items.append(item)
+        if items:
+            groups.append({"title": title, "done": os.path.exists(os.path.join(d, "DONE")),
+                           "items": items, "updated": max(i["updated"] for i in items)})
+    return sorted(groups, key=lambda g: -g["updated"])
 
 
 def find_runs(root):

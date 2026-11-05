@@ -20,6 +20,25 @@ KD = {"hip_pitch": 2, "hip_roll": 2, "hip_yaw": 2, "knee": 4, "ankle_pitch": 2,
       "ankle_roll": 2, "waist": 3, "shoulder": 1, "elbow": 1, "wrist": 0.5}
 
 
+# Motor torque limits (N m), as in MuJoCo Menagerie's unitree_g1 from release 2026.11
+# (Unitree G1 specifications). Set here explicitly because older Menagerie releases
+# (e.g. 2026.10.6) ship the G1 without torque limits, which changes every controller's
+# physics and broke the DCM baseline.
+TORQUE_LIMIT = {"hip_pitch": 88.0, "hip_roll": 139.0, "hip_yaw": 88.0, "knee": 139.0,
+                "ankle_pitch": 50.0, "ankle_roll": 50.0, "waist_yaw": 88.0, "waist_roll": 50.0,
+                "waist_pitch": 50.0, "shoulder_pitch": 25.0, "shoulder_roll": 25.0,
+                "shoulder_yaw": 25.0, "elbow": 25.0, "wrist_roll": 25.0, "wrist_pitch": 5.0,
+                "wrist_yaw": 5.0}
+
+
+def _torque_limit(actuator):
+    name = actuator.replace("_joint", "")
+    for k, v in TORQUE_LIMIT.items():
+        if name.endswith(k):
+            return v
+    raise KeyError(actuator)
+
+
 def _gain_key(joint):
     for k in ("hip_pitch", "hip_roll", "hip_yaw", "knee", "ankle_pitch", "ankle_roll",
               "waist", "shoulder", "elbow", "wrist"):
@@ -67,6 +86,8 @@ def build_g1_scene(heights, length, width, road_width=3.0, mud_depth=0.0, water=
     model = spec.compile()
     for i in range(model.nu):
         name = model.actuator(i).name
+        model.actuator_forcelimited[i] = 1
+        model.actuator_forcerange[i] = [-_torque_limit(name), _torque_limit(name)]
         kp, kd = KP[_gain_key(name)], KD[_gain_key(name)]
         model.actuator_gainprm[i, 0] = kp
         model.actuator_biasprm[i, 1] = -kp

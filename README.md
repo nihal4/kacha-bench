@@ -146,6 +146,7 @@ python scripts/smoke_test.py --view     # opens the MuJoCo viewer
 - [x] G1 humanoid stage 1 (muddy rutted road): flat-foot mud model, scripted mud-walking gait, residual PPO with balance-assist curriculum (`docs/humanoid.md`)
 - [x] Failure-cause recording, gait metrics and robustness sweeps (`docs/study.md`)
 - [x] Model-based capture-point (DCM) walking baseline: crosses the smooth road in most episodes; first soil-wetness breakdown curve
+- [x] Training on the DCM base (`--base dcm`) and one-command train-then-evaluate (`--then-evaluate`); dashboard Results section
 - [ ] G1 stage 1 policies trained (dry, early monsoon, mix; 3 seeds each)
 - [ ] Robustness curves and failure mix for stage 1
 - [ ] G1 stage 2 (box in both hands) and stage 3 (head load + hand box)

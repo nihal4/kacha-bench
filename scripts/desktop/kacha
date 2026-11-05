@@ -18,8 +18,17 @@ case "${1:-help}" in
     case "$EXTRA" in
       *"--robot g1"*)                                              # humanoid, stage 1 road
         T=""
-        case "$EXTRA" in *--no_reference*) T="$T-noref" ;; esac
-        case "$EXTRA" in *"--assist_frac 0 "*|*"--assist_frac 0") T="$T-noassist" ;; esac
+        case "$EXTRA" in
+          *"--base dcm"*)
+            T="-dcm"
+            case "$EXTRA" in *"--assist_frac 0."[1-9]*|*"--assist_frac "[1-9]*) T="$T-assist" ;; esac ;;
+          *)
+            case "$EXTRA" in *--no_reference*) T="$T-noref" ;; esac
+            case "$EXTRA" in *"--assist_frac 0 "*|*"--assist_frac 0") T="$T-noassist" ;; esac ;;
+        esac
+        case "$EXTRA" in *"--road smooth"*) T="$T-smooth" ;; esac
+        W=$(echo "$EXTRA" | grep -oE -- '--wet_start [0-9.]+' | awk '{printf "%g", $2}')
+        [ -n "$W" ] && T="$T-wet$W"
         case "$EXTRA" in *--scan*) T="$T-scan" ;; esac
         H=$(echo "$EXTRA" | grep -oE -- '--history [0-9]+' | awk '{print $2}')
         [ -n "$H" ] && [ "$H" -gt 1 ] && T="$T-h$H"
@@ -72,6 +81,9 @@ kacha job SEASON [STEPS] ["EXTRA"] set the job, e.g.  kacha job none 20000000
                                           "--robot g1" (humanoid, stage 1 muddy road)
                                    g1 baselines (add to "--robot g1"): --no_reference,
                                           "--assist_frac 0", --scan, "--history 5"
+                                   g1 wetness curriculum: "--road smooth --wet_start 0.7"
+                                   g1 on the DCM controller: "--robot g1 --base dcm"
+                                          (add --then-evaluate for tables and sweeps after)
 kacha start | stop | restart       control training (after a reboot: kacha start resumes)
 kacha status                       latest progress, eval, speed, CPU temperature
 kacha log [N]                      follow the training log (Ctrl+C to leave; training continues)

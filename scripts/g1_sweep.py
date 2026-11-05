@@ -43,14 +43,14 @@ GAIT = ("step_length", "cadence_per_min", "double_support", "foot_lift", "stance
 
 def _job(args):
     """One worker task: a method, one swept value, a block of episodes."""
-    spec, axis, value, base, seeds, road = args
+    spec, axis, value, base, seeds, road, fix = args
     from kacha.g1_env import G1MudRoadEnv
     from kacha.g1_policies import make_method, run_episode
     from kacha.terrain import ROADS
     method = make_method(os.path.expanduser(spec) if ":" not in spec else
                          spec.split(":", 1)[0] + ":" + os.path.expanduser(spec.split(":", 1)[1]))
     env = G1MudRoadEnv(season=base, seed=seeds[0], obs_noise=False, assist=0.0, max_seconds=MAX_SECONDS,
-                       mud={axis: value}, road=ROADS[road], **method.env_kw)
+                       mud={**fix, axis: value}, road=ROADS[road], **method.env_kw)
     rows = []
     for s in seeds:
         m = run_episode(method, env, s)
@@ -141,10 +141,18 @@ def main():
                     help="season for every property not swept (dry has no mud: give depth)")
     ap.add_argument("--road", default="rutted", choices=list(ROADS),
                     help="rutted (the monsoon road) or smooth (no ruts, dips or roughness)")
+    ap.add_argument("--fix", nargs="*", default=[], metavar="AXIS=VALUE",
+                    help="hold other mud properties at a value, e.g. --fix LI=0.7")
     ap.add_argument("--episodes", type=int, default=30)
     ap.add_argument("--workers", type=int, default=1)
     ap.add_argument("--out", required=True, help="output path without extension")
     a = ap.parse_args()
+    fix = {}
+    for kv in a.fix:
+        k, _, v = kv.partition("=")
+        if k not in AXES or not v:
+            ap.error(f"--fix expects AXIS=VALUE with AXIS in {AXES}, got {kv!r}")
+        fix[k] = float(v)
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
     block = max(1, a.episodes // max(a.workers, 1))
     jobs = []
@@ -152,7 +160,7 @@ def main():
         for v in a.values:
             seeds = [SWEEP_SEED + k for k in range(a.episodes)]
             for i in range(0, len(seeds), block):
-                jobs.append((spec, a.axis, v, a.base, seeds[i:i + block], a.road))
+                jobs.append((spec, a.axis, v, a.base, seeds[i:i + block], a.road, fix))
     rows = []
     if a.workers > 1:
         with ProcessPoolExecutor(a.workers) as ex:
@@ -171,7 +179,8 @@ def main():
         w.writeheader()
         w.writerows(rows)
     summary = summarise(rows)
-    write_summary(summary, a.axis, f"{a.base}, {a.road} road", a.episodes, a.out + "_summary.md")
+    held = "".join(f", {k} = {v:g}" for k, v in fix.items())
+    write_summary(summary, a.axis, f"{a.base}{held}, {a.road} road", a.episodes, a.out + "_summary.md")
     plot(summary, a.axis, a.out + ".png")
     print(open(a.out + "_summary.md").read())
     print(f"wrote {a.out}.csv, {a.out}_summary.md, {a.out}.png")

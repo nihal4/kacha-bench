@@ -30,7 +30,7 @@ import numpy as np  # noqa: E402
 
 from kacha.g1_env import G1MudRoadEnv  # noqa: E402
 from kacha.terrain import ROADS  # noqa: E402
-from kacha.g1_policies import DCM, Scripted, Trained, Unitree, run_episode  # noqa: E402
+from kacha.g1_policies import run_episode  # noqa: E402
 
 TEST_SEED = 50_000
 # time to cross the 8.3 m road; the same for every method (the DCM controller walks at
@@ -39,14 +39,16 @@ MAX_SECONDS = 60.0
 
 
 # ----------------------------------------------------------------------------- evaluation
-def evaluate(method, season, episodes, road="rutted"):
-    rows = []
-    env = G1MudRoadEnv(season=season, seed=TEST_SEED, obs_noise=False, assist=0.0, max_seconds=MAX_SECONDS,
-                       road=ROADS[road], **method.env_kw)
-    for k in range(episodes):
-        rows.append(run_episode(method, env, TEST_SEED + k))
+def _job(args):
+    """One worker task: a method (built in the worker), a season, a block of road seeds."""
+    spec, season, seeds, road = args
+    from kacha.g1_policies import make_method
+    method = make_method(spec)
+    env = G1MudRoadEnv(season=season, seed=TEST_SEED, obs_noise=False, assist=0.0,
+                       max_seconds=MAX_SECONDS, road=ROADS[road], **method.env_kw)
+    rows = [run_episode(method, env, s) for s in seeds]
     env.close()
-    return rows
+    return spec, method.name, season, rows
 
 
 def summarise(rows):
@@ -68,25 +70,40 @@ def main():
     ap.add_argument("--road", default="rutted", choices=list(ROADS),
                     help="rutted (the monsoon road) or smooth (no ruts, dips or roughness)")
     ap.add_argument("--episodes", type=int, default=10)
+    ap.add_argument("--workers", type=int, default=1, help="parallel processes (use the core count)")
     ap.add_argument("--out", help="markdown table; a .json with every episode is written next to it")
     a = ap.parse_args()
-    methods = ([Scripted()] if a.scripted else []) + ([DCM()] if a.dcm else []) \
-        + [Trained(r, a.best) for r in a.run] \
-        + ([Unitree(a.unitree)] if a.unitree else [])
-    if not methods:
+    specs = (["scripted"] if a.scripted else []) + (["dcm"] if a.dcm else []) \
+        + [("run-best:" if a.best else "run:") + os.path.expanduser(r) for r in a.run] \
+        + ([f"unitree:{os.path.expanduser(a.unitree)}"] if a.unitree else [])
+    if not specs:
         ap.error("give at least one of --scripted, --dcm, --run, --unitree")
+    seeds = [TEST_SEED + k for k in range(a.episodes)]
+    block = max(1, -(-a.episodes // max(a.workers, 1)))
+    jobs = [(sp, season, seeds[i:i + block], a.road) for sp in specs for season in a.seasons
+            for i in range(0, len(seeds), block)]
+    results, names = {}, {}
+    if a.workers > 1:
+        from concurrent.futures import ProcessPoolExecutor
+        with ProcessPoolExecutor(a.workers) as ex:
+            out = list(ex.map(_job, jobs))
+    else:
+        out = [_job(j) for j in jobs]
+    for spec, name, season, rows in out:
+        names[spec] = name
+        results.setdefault((spec, season), []).extend(rows)
     road = 4.3 - (-4.0)
     lines = [f"Stage 1 ({a.road} road, {road:.1f} m), {a.episodes} episodes per season, "
              f"road seeds {TEST_SEED}+k, no assist, no observation noise.", "",
              "| Method | Season | Success | Fell | Left road | Distance (m) | Time (s) | Fall causes |",
              "|---|---|---|---|---|---|---|---|"]
     detail = {}
-    for meth in methods:
+    for sp in specs:
         for season in a.seasons:
-            rows = evaluate(meth, season, a.episodes, a.road)
+            rows = results[(sp, season)]
             s = summarise(rows)
-            detail[f"{meth.name} | {season}"] = rows
-            line = (f"| {meth.name} | {season} | {100 * s['success']:.0f}% | {100 * s['fell']:.0f}% | "
+            detail[f"{names[sp]} | {season}"] = rows
+            line = (f"| {names[sp]} | {season} | {100 * s['success']:.0f}% | {100 * s['fell']:.0f}% | "
                     f"{100 * s['off_road']:.0f}% | {s['distance']:.2f} | {s['seconds']:.1f} | {s['causes']} |")
             lines.append(line)
             print(line, flush=True)

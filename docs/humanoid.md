@@ -132,12 +132,45 @@ success 100% at LI 0.6, 0% from LI 0.75; falls are slips at LI 0.75-0.85 and mos
 sinking at LI 0.9-1.0; cost of transport rises from 1.0 to 2.7 and steps shorten
 from 0.14 to 0.09 m before the breakdown.
 
+With 20 episodes per value (PC run): 100% for LI 0.5-0.7, 0% from 0.75 (70% too
+slow to finish, the rest slip), slips at 0.8 and mostly sinking at 0.9-1.0; cost of
+transport 0.88 at LI 0.5, 1.12 at 0.7, 2.8 at 0.75 and 7.3 at 0.8.
+
 **Limits.** It is sensitive to surface roughness: even 0.5 cm stops it, because each
 step loses a little forward momentum and the lag builds up. Re-planning the speed to
 catch up made the plan jump and was turned off. Its success on long walks is also
 chaotic: tiny numerical differences change single outcomes, so rates need many
 episodes. Contact-based support areas (only the corners touching) were tried and
 removed: contacts flicker and the support area jumped.
+
+## Training on the DCM base (`--base dcm`)
+
+The scripted gait proved too weak a base: two runs (1.5M steps here, 6.8M on the PC)
+never learned to walk without the balance assist. With `--base dcm` the policy instead
+corrects the DCM controller, which already crosses the smooth road. Every physics step
+(200 Hz) the DCM computes its joint targets and the policy's correction is added to the
+leg targets (half the scripted-base action scale, since the DCM servos are stiffer).
+The policy acts at 50 Hz; its observation adds the DCM's tracking error (52 inputs),
+the imitation reward compares the legs with the DCM's joint plan, and the commanded
+speed is the DCM's 0.2 m/s. No balance assist by default (the DCM balances).
+
+With zero corrections the environment is exactly the DCM controller: on the rutted
+early-monsoon road it falls within 0.3 m (return -15) and on the smooth road it
+crosses (return 92), so there is a large, learnable gap.
+
+Cost: the DCM runs in Python at the physics rate, about 170 control steps/s per core
+(it fails if run at 100 or 50 Hz), so roughly 500-700 steps/s on 4 cores: 15M steps
+take about 6-8 hours.
+
+One command trains and then evaluates (`--then-evaluate`): season tables on the smooth
+and rutted roads and soil-wetness sweeps (trained policy, DCM, scripted gait; 20
+episodes each), written to `runs/<run>/results/` and shown in the dashboard's Results
+section:
+
+```
+kacha job early_monsoon 15000000 "--robot g1 --base dcm --then-evaluate"
+kacha start
+```
 
 ## Stage 1 task
 

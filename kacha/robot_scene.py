@@ -21,6 +21,20 @@ def terrain_height(heights, length, width, x, y):
                  + (1 - tx) * ty * h[i0, j0 + 1] + tx * ty * h[i0 + 1, j0 + 1])
 
 
+def terrain_height_vec(heights, length, width, x, y):
+    """Vectorised terrain_height for arrays of points."""
+    x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
+    nx, ny = heights.shape
+    fx = np.clip((x + length / 2) / length * (nx - 1), 0, nx - 1)
+    fy = np.clip((y + width / 2) / width * (ny - 1), 0, ny - 1)
+    i0 = np.minimum(fx, nx - 2).astype(int)
+    j0 = np.minimum(fy, ny - 2).astype(int)
+    tx, ty = fx - i0, fy - j0
+    h = heights
+    return ((1 - tx) * (1 - ty) * h[i0, j0] + tx * (1 - ty) * h[i0 + 1, j0]
+            + (1 - tx) * ty * h[i0, j0 + 1] + tx * ty * h[i0 + 1, j0 + 1])
+
+
 def _add_hfield(spec, name, heights, length, width, **geom_kw):
     zmin, zmax = float(heights.min()), float(heights.max())
     elev = max(zmax - zmin, 1e-3)

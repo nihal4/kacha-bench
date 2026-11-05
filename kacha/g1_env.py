@@ -11,6 +11,10 @@ Baseline variants (docs/humanoid.md, "Baselines"):
   pretrained G1 policy runs in this mode too (scripts/g1_evaluate.py).
 - height_scan=True: 9 x 5 heights ahead of the robot (water hides pothole depth).
 - history=k: the last k proprioceptive observations, as a simple memory.
+- base="dcm": the policy corrects the model-based capture-point controller (kacha/dcm.py)
+  instead of the scripted gait. The DCM controller runs at the physics rate and walks
+  smooth ground on its own; the policy adds small leg-target corrections on top, at
+  every physics step, to handle what it cannot (roughness, ruts, sinking mud).
 
 Reward (task-specific; docs/humanoid.md "Stage 1 reward"): pay for progress toward the
 end of the road, a large one-off penalty for falling or leaving the road, a bonus for
@@ -25,7 +29,7 @@ import numpy as np
 from .g1_scene import build_g1_scene, foot_geoms
 from .gait import GaitParams, ScriptedWalker
 from .mud import SEASONS, FlatFootMud, MudParams, breakout_ratio, shear_strength
-from .robot_scene import terrain_height
+from .robot_scene import terrain_height, terrain_height_vec
 from .terrain import generate_village_road, muddy_rut_road
 from .water import SEASON_FILL, Water, WaterForces
 
@@ -38,6 +42,9 @@ ACTION_SCALE = np.array([0.25, 0.15, 0.10, 0.25, 0.20, 0.10] * 2)   # rad, per l
 UNITREE_DEFAULT = np.array([-0.1, 0.0, 0.0, 0.3, -0.2, 0.0] * 2)
 UNITREE_SCALE = 0.25
 N_PROPRIO = 50
+N_PROPRIO_DCM = 52           # + the DCM tracking error (2) for base="dcm"
+DCM_SPEED = 0.2              # m/s, the speed the DCM controller walks reliably
+DCM_SCALE = 0.5 * np.array([0.25, 0.15, 0.10, 0.25, 0.20, 0.10] * 2)   # rad, corrections
 # Failure-cause thresholds (heuristics; docs/study.md, "Failure causes"), judged over the
 # last 0.5 s before a fall
 CAUSE_WINDOW = 25            # control steps
@@ -63,11 +70,16 @@ class G1MudRoadEnv(gym.Env):
                  max_seconds=40.0, regen_every=20, timestep=0.005, control_dt=0.02,
                  obs_noise=True, look=False, spawn_x=-4.0, goal_x=4.3, road=None,
                  assist=0.0, reference=True, height_scan=False, history=1,
-                 mud=None, render_mode=None):
+                 mud=None, base="scripted", render_mode=None):
         # mud: overrides for robustness sweeps, applied on top of the season:
         #   LI (sets strength and suction together), su_kpa, depth (m), beta (suction
         #   ratio), mu (surface friction), fill (share of each hole filled with water)
         self.mud_override = dict(mud or {})
+        self._mud_changed = False
+        if base not in ("scripted", "dcm"):
+            raise ValueError(f"base must be 'scripted' or 'dcm', got {base!r}")
+        self.base = base
+        self.dcm = None
         self.assist = float(assist)
         self.reference, self.height_scan = bool(reference), bool(height_scan)
         self.history = max(int(history), 1)
@@ -82,7 +94,8 @@ class G1MudRoadEnv(gym.Env):
         self.walker = ScriptedWalker(GaitParams())
         self._resets, self._renderer, self.model = 0, None, None
         self._build()
-        n_obs = N_PROPRIO * self.history + (len(SCAN_X) * len(SCAN_Y) if self.height_scan else 0)
+        n_p = N_PROPRIO_DCM if self.base == "dcm" else N_PROPRIO
+        n_obs = n_p * self.history + (len(SCAN_X) * len(SCAN_Y) if self.height_scan else 0)
         self.observation_space = gym.spaces.Box(-np.inf, np.inf, (n_obs,), np.float32)
         self.action_space = gym.spaces.Box(-1.0, 1.0, (12,), np.float32)
 
@@ -114,6 +127,8 @@ class G1MudRoadEnv(gym.Env):
         m = self.model
         self.data = mujoco.MjData(m)
         self.surface = lambda x, y: terrain_height(self.heights, self.cfg.length, self.cfg.width, x, y)
+        self.surface_vec = lambda x, y: terrain_height_vec(self.heights, self.cfg.length,
+                                                           self.cfg.width, x, y)
         self.mud = FlatFootMud(m, self.mud_p, self.surface, foot_geoms()) if depth > 0 else None
         self.wforces = WaterForces(m, self.water) if self.water.pools else None
         self.sub = int(round(self.control_dt / m.opt.timestep))
@@ -131,6 +146,8 @@ class G1MudRoadEnv(gym.Env):
         o = self.mud_override
         base = SEASONS.get(self.cur_season, {"LI": -0.2, "depth": 0.0})
         LI = o.get("LI", base["LI"])
+        if "LI_lo" in o and LI > o["LI_lo"]:   # curriculum: each road at a wetness up to LI
+            LI = float(self.rng.uniform(o["LI_lo"], LI))
         depth = o.get("depth", base["depth"])
         if depth <= 0:
             return None, 0.0
@@ -158,8 +175,9 @@ class G1MudRoadEnv(gym.Env):
         if seed is not None:
             self.rng = np.random.default_rng(seed)
             self._build()
-        elif self._resets and self._resets % self.regen_every == 0:
+        elif (self._resets and self._resets % self.regen_every == 0) or self._mud_changed:
             self._build()
+        self._mud_changed = False
         self._resets += 1
         m, d = self.model, self.data
         mujoco.mj_resetData(m, d)
@@ -178,6 +196,12 @@ class G1MudRoadEnv(gym.Env):
         if self.mud:
             self.mud.zp[:] = 0.0
         self.cmd = float(self.rng.uniform(*self.speed_range))
+        if self.base == "dcm":
+            from .dcm import DCMWalker
+            self.dcm = DCMWalker(m, surface=self.surface, surface_vec=self.surface_vec)
+            self.dcm.settle(d, u0[12:])
+            self.dcm.reset(d, DCM_SPEED, u0[12:])
+            self.cmd = DCM_SPEED
         self.t, self.steps = 0.0, 0
         self.last_action = np.zeros(12)
         self.x0 = float(d.qpos[0])
@@ -195,6 +219,8 @@ class G1MudRoadEnv(gym.Env):
         return (t / T) % 1.0, self.cmd * min(t / 1.0, 1.0)
 
     def _ref(self):
+        if self.base == "dcm":
+            return self._ref_dcm()
         d = self.data
         self.phase, self.speed = self._phase_speed()
         R = d.xmat[self.pelvis].reshape(3, 3)
@@ -207,6 +233,33 @@ class G1MudRoadEnv(gym.Env):
             self.u_ref[:12] = UNITREE_DEFAULT
         return self.u_ref
 
+    def _ref_dcm(self):
+        """Reference from the DCM controller: its joint plan (without the torque part),
+        the gait-cycle phase, and which feet it has down."""
+        w = self.dcm
+        T = w.p.t_ss + w.p.t_ds
+        if w.phase == "init":
+            frac, self.speed = 0.0, 0.0
+        else:
+            frac = (w.t / T) if w.phase == "ss" else ((w.p.t_ss + w.t) / T)
+            self.speed = w.speed
+        self.phase = ((w.n_steps + min(frac, 1.0)) / 2.0) % 1.0
+        self.u_ref = np.r_[w.q_des[:12], w.upper_pose]
+        if w.phase == "ss":
+            self.stance_ref = np.array([w.stance == 0, w.stance == 1])
+        else:
+            self.stance_ref = np.array([True, True])
+        return self.u_ref
+
+    def _dcm_ctrl(self, a):
+        corr = DCM_SCALE * a
+
+        def fn(d, dt):
+            u = self.dcm(d, dt)
+            u[:12] += corr
+            return u
+        return fn
+
     def step(self, action, ctrl_fn=None):
         """ctrl_fn: optional controller called before every physics step as
         ctrl_fn(data, dt) -> actuator targets; it replaces the action (model-based
@@ -216,6 +269,8 @@ class G1MudRoadEnv(gym.Env):
         u = self.u_ref.copy()
         u[:12] += (ACTION_SCALE if self.reference else UNITREE_SCALE) * a
         d.ctrl[:] = np.clip(u, m.actuator_ctrlrange[:, 0], m.actuator_ctrlrange[:, 1])
+        if self.base == "dcm":
+            ctrl_fn = self._dcm_ctrl(a)
         suction = np.zeros(2)
         for _ in range(self.sub):
             if self.mud:
@@ -420,6 +475,13 @@ class G1MudRoadEnv(gym.Env):
             cost_of_transport=self._energy / (mass * 9.81 * dist) if dist > 0.2 else None,
             **{f"mud_{k}": v for k, v in self.mud_summary().items()})
 
+    def set_mud(self, **override):
+        """Change mud properties (as in the mud= argument) from the next reset on, e.g. for
+        a wetness curriculum in training: env.set_mud(LI=0.8)."""
+        new = {**self.mud_override, **{k: float(v) for k, v in override.items()}}
+        if new != self.mud_override:
+            self.mud_override, self._mud_changed = new, True
+
     def set_assist(self, value):
         self.assist = float(np.clip(value, 0.0, 1.0))
 
@@ -493,6 +555,9 @@ class G1MudRoadEnv(gym.Env):
                  d.qpos[7:19] - self.u_ref[:12] + u(12, NOISE["joint_pos"]),
                  0.05 * (d.qvel[6:18] + u(12, NOISE["joint_vel"])),
                  self.last_action, self.stance_ref.astype(float)]
+        if self.base == "dcm":
+            g = getattr(self.dcm, "debug", None)
+            parts.append(g["xi"] - g["xi_ref"] if g else np.zeros(2))
         return np.concatenate(parts).astype(np.float32)
 
     def render(self):
@@ -515,4 +580,5 @@ def env_kwargs_from_config(cfg):
     season = cfg.get("season", "peak_monsoon")
     return dict(season="dry" if season == "none" else season,
                 reference=cfg.get("g1_reference", True),
-                height_scan=cfg.get("scan", False), history=cfg.get("g1_history", 1))
+                height_scan=cfg.get("scan", False), history=cfg.get("g1_history", 1),
+                base=cfg.get("g1_base", "scripted"))

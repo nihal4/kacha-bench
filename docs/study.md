@@ -97,6 +97,30 @@ First results with the DCM controller (smooth road, 15 cm mud): success 100% at 
 conditions as expected: on the dry road falls are balance failures, in early-monsoon
 mud mostly slips, in peak-monsoon mud sinking (with an occasional suction trap).
 
+### Learning on top of the DCM controller
+
+PPO adds small corrections to the DCM controller's leg targets (`--base dcm`). Trained
+straight in peak-monsoon mud it never learns (DCM falls at once, so there is nothing to
+improve on). A **soil-wetness curriculum** (`--wet_start 0.7`) starts where DCM always
+crosses and makes the mud wetter by 0.05 each time 60% of training episodes succeed.
+
+First check (smooth road, 800k steps, one seed, 10 test roads per value; `results/wet_check_LI_summary.md`):
+
+| LI | DCM alone | PPO on DCM, curriculum |
+|---|---|---|
+| 0.70 | 100% | 20% |
+| 0.75 | 0% | 90% |
+| 0.80 | 0% | 100% |
+| 0.85 | 0% (all slip) | 0% (no falls, too slow: 7.5 of 8.3 m in 60 s) |
+
+Learning moved the breakdown point from LI 0.70-0.75 to 0.80-0.85. The policy forgot the
+easier mud it had been trained on first (LI 0.70); since then each training road's wetness
+is drawn between the start and the current level. Needs the full run with 3 seeds:
+
+```
+kacha job peak_monsoon 10000000 "--robot g1 --base dcm --road smooth --wet_start 0.7 --then-evaluate"
+```
+
 ## Analyses
 
 1. **Robustness curves**: success (95% Wilson intervals) against each axis, one line
@@ -127,6 +151,27 @@ python scripts/g1_sweep.py --axis LI --values -0.2 0.2 0.5 0.7 0.9 1.0 1.1 1.2 \
 ```
 
 Run sweeps when no training is running, or with fewer workers.
+
+Two properties at once: `--fix` holds another property, e.g. friction swept with the
+soil held at the last fully working wetness:
+
+```
+python scripts/g1_sweep.py --axis mu --values 0.15 0.2 0.25 0.3 0.45 --fix LI=0.7 \
+    --methods dcm --base peak_monsoon --road smooth --episodes 20 --workers 4 --out results/sweep_mu_LI07
+```
+
+`g1_evaluate.py` and `g1_sweep.py` take `--workers N` (parallel episodes). Results in
+`~/kacha/repo/results/` and in each run's `results/` folder appear in the dashboard's
+Results section.
+
+## Reproducibility
+
+Library versions are pinned in `requirements.txt` (mujoco 3.17.0, mujoco-menagerie
+2026.11.2). Menagerie 2026.10.6 ships the G1 without motor torque limits, which made
+the DCM controller fail everywhere and gave every controller unlimited torque; the
+limits are now set explicitly in `kacha/g1_scene.py`, and both versions give identical
+episodes. Long walks are chaotic (tiny numerical differences change single outcomes),
+so report rates over many episodes, never single runs.
 
 ## Scope and limits
 

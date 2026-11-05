@@ -1,6 +1,8 @@
-mujoco>=3.2
-mujoco-menagerie
-numpy
+# versions the published results were produced with; other versions can change the
+# contact physics (docs/study.md, "Reproducibility")
+mujoco==3.17.0
+mujoco-menagerie==2026.11.2
+numpy>=2.5,<2.6
 imageio
 imageio-ffmpeg
 matplotlib

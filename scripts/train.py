@@ -42,24 +42,51 @@ def parse():
                     help="Go1 reward version (docs/training.md); 'playground' reproduces older runs")
     ap.add_argument("--robot", default="go1", choices=["go1", "g1"],
                     help="go1 (quadruped walking) or g1 (humanoid, stage 1 muddy road)")
-    ap.add_argument("--assist_frac", type=float, default=0.4,
+    ap.add_argument("--assist_frac", type=float, default=None,
                     help="g1: share of training over which the balance assist fades from 1 to 0 "
-                         "(0 = no assist)")
+                         "(0 = no assist; default 0.4 with the scripted base, 0 with the DCM base)")
+    ap.add_argument("--base", default="scripted", choices=["scripted", "dcm"],
+                    help="g1: controller the policy corrects: the scripted gait or the DCM "
+                         "capture-point controller (docs/humanoid.md)")
+    ap.add_argument("--then_evaluate", "--then-evaluate", action="store_true",
+                    help="g1: when training finishes, run the season tables and soil-wetness "
+                         "sweeps (trained policy, DCM, scripted; smooth and rutted roads) into "
+                         "RUN/results/")
+    ap.add_argument("--init_std", type=float, default=None,
+                    help="g1: initial exploration noise of the policy's actions (default 0.3; "
+                         "0.1 with the DCM base, which is sensitive to noise in its targets)")
+    ap.add_argument("--after_episodes", type=int, default=20,
+                    help="episodes per condition in the after-training evaluation")
     ap.add_argument("--assist_mode", default="adaptive", choices=["adaptive", "linear"],
                     help="g1: adaptive = lower the assist only when training episodes cover "
                          "enough distance (with a deadline at assist_frac); linear = fixed fade")
     ap.add_argument("--no_reference", action="store_true",
                     help="g1 baseline: no scripted controller, joints from Unitree's default pose")
+    ap.add_argument("--road", default="rutted", choices=["rutted", "smooth"],
+                    help="g1: training road: rutted (the monsoon road) or smooth (no ruts, dips "
+                         "or roughness; mud only)")
+    ap.add_argument("--wet_start", type=float, default=None, metavar="LI",
+                    help="g1: soil-wetness curriculum: start training at this liquidity index "
+                         "(e.g. 0.7, where the DCM controller always crosses) and raise it by 0.05 "
+                         "whenever recent training episodes succeed at least 60%% of the time, "
+                         "up to the season's own LI (each road between the start and the level). Evaluation always uses the season.")
     ap.add_argument("--history", type=int, default=1,
                     help="g1: number of past observations in the input (simple memory)")
     args = ap.parse_args()
+    if args.assist_frac is None:
+        args.assist_frac = 0.0 if args.base == "dcm" else 0.4
     cfg = dict(PROFILES[args.profile])
     for k in ("total_steps", "n_envs"):
         if getattr(args, k):
             cfg[k] = getattr(args, k)
     if args.robot == "g1":
-        tags = ("-noref" if args.no_reference else "") + ("-noassist" if args.assist_frac <= 0 else "") \
-            + ("-scan" if args.scan else "") + (f"-h{args.history}" if args.history > 1 else "")
+        if args.base == "dcm":
+            tags = "-dcm" + ("-assist" if args.assist_frac > 0 else "")
+        else:
+            tags = ("-noref" if args.no_reference else "") + ("-noassist" if args.assist_frac <= 0 else "")
+        tags += ("-smooth" if args.road == "smooth" else "")
+        tags += (f"-wet{args.wet_start:g}" if args.wet_start is not None else "")
+        tags += ("-scan" if args.scan else "") + (f"-h{args.history}" if args.history > 1 else "")
         args.name = args.name or f"g1-road-{args.season}{tags}-s{args.seed}"
     else:
         tag = "" if args.reward == "playground" else f"-{args.reward}"
@@ -68,13 +95,17 @@ def parse():
 
 
 def make_env(season, scan, seed, reward="v2", robot="go1", assist=0.0, reference=True,
-             history=1):
+             history=1, base="scripted", road="rutted"):
     def _f():
         if robot == "g1":
             from kacha.g1_env import G1MudRoadEnv
+            from kacha.terrain import ROADS
+            # the DCM base walks at 0.2 m/s: the 8.3 m road takes about 43 s, so episodes
+            # get the same 60 s as in evaluation (40 s made reaching the goal impossible)
             return G1MudRoadEnv(season="dry" if season == "none" else season, seed=seed,
                                 assist=assist, reference=reference, height_scan=scan,
-                                history=history)
+                                history=history, base=base, road=ROADS[road],
+                                max_seconds=60.0 if base == "dcm" else 40.0)
         from kacha.walk_env import Go1WalkEnv
         return Go1WalkEnv(season=season, seed=seed, height_scan=scan, reward=reward)
     return _f
@@ -111,6 +142,7 @@ def main():
         args.robot = old.get("robot", "go1")
         args.no_reference = not old.get("g1_reference", True)
         args.history = old.get("g1_history", 1)
+        args.base = old.get("g1_base", "scripted")
         args.assist_frac = old.get("assist_frac", args.assist_frac)
         args.assist_mode = old.get("assist_mode", "linear")
         print(f"[train] resuming: robot {args.robot}, reward version {args.reward}", flush=True)
@@ -120,12 +152,15 @@ def main():
               "profile": args.profile, "reward": "g1_stage1" if g1 else args.reward,
               "assist_frac": args.assist_frac if g1 else 0.0,
               "assist_mode": args.assist_mode if g1 else "",
-              "g1_reference": not args.no_reference, "g1_history": args.history, **cfg}
+              "g1_reference": not args.no_reference, "g1_history": args.history,
+              "g1_base": args.base if g1 else "", "g1_road": args.road if g1 else "",
+              "g1_wet_start": args.wet_start if g1 else None, **cfg}
     if not (args.resume and os.path.exists(cfg_file)):
         json.dump(config, open(cfg_file, "w"), indent=2)
 
     Vec = SubprocVecEnv if cfg["n_envs"] > 1 else DummyVecEnv
-    g1_kw = dict(reference=not args.no_reference, history=args.history)
+    g1_kw = dict(reference=not args.no_reference, history=args.history, base=args.base,
+                 road=args.road)
     use_assist = g1 and args.assist_frac > 0
     venv = Vec([make_env(args.season, args.scan, args.seed * 1000 + i, args.reward, args.robot,
                          assist=1.0 if use_assist else 0.0, **g1_kw) for i in range(cfg["n_envs"])])
@@ -162,7 +197,9 @@ def main():
                                            activation_fn=torch.nn.ELU,
                                            # without the scripted controller there is no
                                            # gait to explore around: usual noise (std 0.6)
-                                           log_std_init=-0.5 if args.no_reference else -1.2),
+                                           log_std_init=float(np.log(args.init_std)) if args.init_std
+                                           else -0.5 if args.no_reference else
+                                           float(np.log(0.1)) if args.base == "dcm" else -1.2),
                         seed=args.seed, device="cpu", verbose=1)
         else:
             model = PPO("MlpPolicy", norm, learning_rate=3e-4, n_steps=cfg["n_steps"],
@@ -277,6 +314,49 @@ def main():
 
     assist_now = [1.0 if use_assist else 0.0]
 
+    WET_STEP, WET_GOAL, WET_EVERY = 0.05, 0.6, 50_000
+
+    class Wetness(BaseCallback):
+        """Soil-wetness curriculum (g1): every 50k steps, raise the training mud's liquidity
+        index by 0.05 if at least 60% of recent training episodes reached the goal, from
+        --wet_start up to the season's LI. Each road's wetness is drawn between --wet_start
+        and the current level. The level reached is itself a result: the
+        wettest mud the policy learned to cross."""
+        STATE = os.path.join(out, "wet_state.json")
+
+        def __init__(self):
+            super().__init__()
+            from kacha.mud import SEASONS
+            self.target = SEASONS.get(args.season, {}).get("LI", args.wet_start)
+            self.level, self.last_check, self.sent = args.wet_start, 0, None
+            if resumed and os.path.exists(self.STATE):
+                st = json.load(open(self.STATE))
+                self.level, self.last_check = float(st["LI"]), int(st["last_check"])
+                print(f"[train] wetness curriculum resumed at LI {self.level:.2f}", flush=True)
+
+        def _on_step(self):
+            t = self.model.num_timesteps
+            if t - self.last_check >= WET_EVERY:
+                self.last_check = t
+                succ = list(self.model.ep_success_buffer)
+                if succ and np.mean(succ) >= WET_GOAL and self.level < self.target - 1e-9:
+                    self.level = min(self.target, round(self.level + WET_STEP, 3))
+                    self.model.ep_success_buffer.clear()   # judge the new level on its own
+            if self.sent != self.level:
+                # each training road gets a wetness between the start and the level, so
+                # the policy keeps practising easier mud (without this it forgot LI 0.7)
+                self.model.get_env().env_method("set_mud", LI=self.level, LI_lo=args.wet_start)
+                self.sent = self.level
+                tmp = self.STATE + ".tmp"
+                json.dump({"LI": self.level, "target": self.target, "last_check": self.last_check,
+                           "steps": t}, open(tmp, "w"))
+                os.replace(tmp, self.STATE)
+            wet_now[0] = self.level
+            return True
+
+    use_wet = g1 and args.wet_start is not None
+    wet_now = [args.wet_start]
+
     class Progress(BaseCallback):
         def _on_step(self):
             m = self.model
@@ -292,12 +372,15 @@ def main():
                 line += f" | distance {np.mean(dist):.2f} m"
             if use_assist:
                 line += f" | assist {assist_now[0]:.2f}"
+            if use_wet:
+                line += f" | mud LI {wet_now[0]:.2f}"
             print(line, flush=True)
             return True
 
     safety = SafetyCallback(save, max_minutes=cfg["max_minutes"])
     every = 50_000 if cfg["total_steps"] > 100_000 else cfg["n_steps"] * cfg["n_envs"]
-    callbacks = CallbackList([SyncNorm(), eval_cb] + ([Assist()] if use_assist else []) + [
+    callbacks = CallbackList([SyncNorm(), eval_cb] + ([Assist()] if use_assist else [])
+                             + ([Wetness()] if use_wet else []) + [
                               EveryNTimesteps(n_steps=every, callback=Save()),
                               EveryNTimesteps(n_steps=every, callback=Progress()), safety])
 
@@ -314,6 +397,42 @@ def main():
     why = safety.stop_reason or "finished"
     print(f"[train] {why}. Saved to {out} at {model.num_timesteps:,} steps. Use --resume to continue.",
           flush=True)
+    if g1 and args.then_evaluate and model.num_timesteps >= cfg["total_steps"] and not safety.stop_reason:
+        after_training(out, cfg, args)
+
+
+def after_training(run, cfg, args):
+    """Season tables and soil-wetness sweeps for the trained policy, the DCM controller
+    and the scripted gait, on the smooth and rutted roads, into RUN/results/. Skipped if
+    already done (RUN/results/DONE), so a restarted job does not repeat it."""
+    import subprocess
+    res = os.path.join(run, "results")
+    os.makedirs(res, exist_ok=True)
+    done = os.path.join(res, "DONE")
+    if os.path.exists(done):
+        print(f"[after] already done: {res}", flush=True)
+        return
+    here = os.path.dirname(os.path.abspath(__file__))
+    py, n, w = sys.executable, str(args.after_episodes), str(cfg["n_envs"])
+    li = ["0.5", "0.6", "0.65", "0.7", "0.75", "0.8", "0.9", "1.0"]
+    steps = []
+    for road in ("smooth", "rutted"):
+        steps.append([py, os.path.join(here, "g1_evaluate.py"), "--run", run, "--dcm", "--scripted",
+                      "--road", road, "--seasons", "dry", "early_monsoon", "peak_monsoon",
+                      "--episodes", n, "--workers", w, "--out", os.path.join(res, f"seasons_{road}.md")])
+    for road in ("smooth", "rutted"):
+        steps.append([py, os.path.join(here, "g1_sweep.py"), "--axis", "LI", "--values", *li,
+                      "--methods", "dcm", f"run:{run}", "--base", "peak_monsoon", "--road", road,
+                      "--episodes", n, "--workers", w, "--out", os.path.join(res, f"sweep_LI_{road}")])
+    for i, cmd in enumerate(steps, 1):
+        print(f"[after] {i}/{len(steps)}: {' '.join(os.path.basename(c) if c.endswith('.py') else c for c in cmd[1:])}",
+              flush=True)
+        r = subprocess.run(cmd)
+        if r.returncode != 0:
+            print(f"[after] step {i} failed (exit {r.returncode}); rerun with --resume to retry", flush=True)
+            return
+    open(done, "w").write("ok\n")
+    print(f"[after] all done: results in {res}", flush=True)
 
 
 if __name__ == "__main__":

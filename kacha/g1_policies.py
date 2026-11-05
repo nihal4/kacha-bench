@@ -103,17 +103,26 @@ class DCM:
     name = "DCM capture-point controller"
     env_kw = {}
 
-    def __init__(self, speed=0.2, **params):
+    def __init__(self, speed=0.2, every=1, **params):
         from .dcm import DCMParams
-        self.speed, self.params = speed, DCMParams(**params)
+        self.speed, self.params, self.every = speed, DCMParams(**params), int(every)
 
     def reset(self, env):
         from .dcm import DCMWalker
-        self.w = DCMWalker(env.model, self.params, surface=env.surface)
+        self.w = DCMWalker(env.model, self.params, surface=env.surface,
+                           surface_vec=getattr(env, "surface_vec", None))
         upper = env.u_ref[12:].copy()
         self.w.settle(env.data, upper)
         self.w.reset(env.data, self.speed, upper)
-        self.ctrl_fn = self.w
+        self._n, self._u = 0, None
+        self.ctrl_fn = self._ctrl
+
+    def _ctrl(self, d, dt):
+        """Run the controller every `every` physics steps and hold its output between."""
+        if self._u is None or self._n % self.every == 0:
+            self._u = self.w(d, dt * self.every)
+        self._n += 1
+        return self._u
 
     def act(self, env, obs):
         return np.zeros(12)

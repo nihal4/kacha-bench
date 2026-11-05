@@ -121,9 +121,11 @@ def _smooth(s):
 
 
 class DCMWalker:
-    def __init__(self, model, params=None, surface=None):
+    def __init__(self, model, params=None, surface=None, surface_vec=None):
         self.m, self.p = model, params or DCMParams()
         self.surface = surface or (lambda x, y: 0.0)
+        self.surface_vec = surface_vec or (lambda x, y: np.vectorize(self.surface)(x, y))
+        self._calls, self._rot_cache = 0, {}
         self.scratch = mujoco.MjData(model)
         self.mass = float(np.sum(model.body_mass))
         self.feet = [model.body(f"{s}_ankle_roll_link").id for s in SIDES]
@@ -305,7 +307,8 @@ class DCMWalker:
                 land = self._limit_step(xi_T - (xi_ss_end - next_nom))
                 # terrain-aware foothold: chosen while the step is young, then kept as
                 # an offset from the (still live) capture-point target
-                if self.t < 0.5 * p.t_ss:
+                self._calls += 1
+                if self.t < 0.5 * p.t_ss and self._calls % 4 == 1:
                     sole_xy = land - self._fwd() * ANCHOR_FWD
                     self._fh = self.pick_foothold(sole_xy) - sole_xy
                 land = land + getattr(self, "_fh", np.zeros(2))
@@ -465,11 +468,13 @@ class DCMWalker:
 
     # ------------------------------------------------------------------ helpers
     def slope(self, x, y):
-        """Steepest ground slope (rise per metre) across a sole-sized patch at (x, y)."""
-        h = self.surface
+        """Steepest ground slope (rise per metre) across a sole-sized patch at (x, y);
+        x and y may be arrays."""
+        x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
+        h = self.surface_vec
         gx = (h(x + 0.08, y) - h(x - 0.08, y)) / 0.16
         gy = (h(x, y + 0.03) - h(x, y - 0.03)) / 0.06
-        return float(np.hypot(gx, gy))
+        return np.hypot(gx, gy)
 
     def pick_foothold(self, xy, n=7, w_dist=1.5):
         """Terrain-aware footstep: the point within foothold_radius of the capture-point
@@ -477,18 +482,31 @@ class DCMWalker:
         radius = self.p.foothold_radius
         if radius <= 0:
             return xy
-        best, cost = xy, self.slope(*xy)
-        for dx in np.linspace(-radius, radius, n):
-            for dy in np.linspace(-radius, radius, n):
-                q = xy + np.array([dx, dy])
-                c = self.slope(*q) + w_dist * np.hypot(dx, dy)
-                if c < cost:
-                    best, cost = q, c
-        return best
+        g = np.linspace(-radius, radius, n)
+        dx, dy = np.meshgrid(g, g, indexing="ij")
+        dx, dy = dx.ravel(), dy.ravel()
+        cost = self.slope(xy[0] + dx, xy[1] + dy) + w_dist * np.hypot(dx, dy)
+        cost0 = float(self.slope(xy[0], xy[1]))
+        i = int(np.argmin(cost))
+        if cost[i] < cost0:
+            return xy + np.array([dx[i], dy[i]])
+        return xy
 
     def ground_rot(self, x, y):
         """Sole orientation lying on the ground at (x, y), in the walking heading: pitch
-        and roll from the terrain slope over the length and width of the sole."""
+        and roll from the terrain slope over the length and width of the sole (cached to
+        the millimetre: planted feet ask for the same point every step)."""
+        key = (round(float(x), 3), round(float(y), 3), round(float(self.yaw), 3))
+        hit = self._rot_cache.get(key)
+        if hit is not None:
+            return hit
+        if len(self._rot_cache) > 4096:
+            self._rot_cache.clear()
+        R = self._ground_rot(x, y)
+        self._rot_cache[key] = R
+        return R
+
+    def _ground_rot(self, x, y):
         c, s_ = np.cos(self.yaw), np.sin(self.yaw)
         f, l = np.array([c, s_]), np.array([-s_, c])
         h = lambda q: self.surface(q[0], q[1])

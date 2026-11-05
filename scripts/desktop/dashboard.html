@@ -67,6 +67,12 @@ h1 { font-size: 20px; margin: 0; flex: 1 1 auto; letter-spacing: -.01em; }
 .events div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 h3 { font-size: 15px; margin: 16px 0 8px; }
+.res table { border-collapse: collapse; font-size: 12px; margin: 6px 0 12px; display: block; overflow-x: auto; }
+.res th, .res td { border: 1px solid var(--rule); padding: 3px 6px; text-align: left; white-space: nowrap; }
+.res th { background: var(--track); }
+.res p { font-size: 13px; color: var(--muted); margin: 6px 0; }
+.res img { max-width: min(100%, 720px); border: 1px solid var(--rule); border-radius: 8px; background: #fff; }
+.res .fname { font: 12px ui-monospace, Menlo, Consolas, monospace; color: var(--faint); margin-top: 10px; }
 .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
 .gallery figure { margin: 0; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; background: var(--panel); }
 .gallery video { display: block; width: 100%; aspect-ratio: 4/3; background: #000; }
@@ -98,6 +104,9 @@ details.run .body { padding: 0 14px 14px; }
   </header>
 
   <section class="card" id="now"><p class="muted">Loading…</p></section>
+
+  <h3 id="resultsTitle" hidden>Results</h3>
+  <div id="results"></div>
 
   <h3 id="earlierTitle" hidden>Earlier runs</h3>
   <div id="earlier"></div>
@@ -254,6 +263,7 @@ function render() {
     gallery($("#vids"), run);
   }
 
+  renderResults();
   const others = (S.runs || []).filter(r => !r.active);
   $("#earlierTitle").hidden = !others.length;
   const box = $("#earlier");
@@ -270,6 +280,30 @@ function render() {
       (r.best_solved != null ? ` · best walked ${pct(r.best_solved)}` : "") : "no evaluations"} · ${r.videos.length} videos · updated ${ago(now - r.last_update)}</span>`;
     if (d.open) fill(d, r.name);
   });
+}
+function mdToHtml(md) {
+  // pipe tables and paragraphs only (what the evaluation scripts write)
+  const out = []; let rows = [];
+  const flush = () => {
+    if (!rows.length) return;
+    const body = rows.filter(r => !/^\|\s*-{2,}/.test(r)).map(r => r.replace(/^\||\|$/g, "").split("|").map(c => c.trim()));
+    out.push("<table>" + body.map((r, i) => "<tr>" + r.map(c => i ? `<td>${esc(c)}</td>` : `<th>${esc(c)}</th>`).join("") + "</tr>").join("") + "</table>");
+    rows = [];
+  };
+  md.split("\n").forEach(l => { if (l.trim().startsWith("|")) rows.push(l.trim()); else { flush(); if (l.trim()) out.push(`<p>${esc(l)}</p>`); } });
+  flush();
+  return out.join("");
+}
+function renderResults() {
+  const groups = S.results || [];
+  $("#resultsTitle").hidden = !groups.length;
+  const box = $("#results");
+  const key = JSON.stringify(groups.map(g => [g.title, g.updated]));
+  if (box._key === key) return;
+  box._key = key;
+  box.innerHTML = groups.map(g => `<details class="run res"${groups.length === 1 ? " open" : ""}><summary><b>${esc(g.title)}</b><span>${g.items.length} files${g.done ? " · complete" : ""} · updated ${ago(Date.now() / 1000 - g.updated)}</span></summary><div class="body">` +
+    g.items.map(i => `<div class="fname">${esc(i.name)}</div>` + (i.img ? `<img loading="lazy" src="${esc(i.img)}?t=${Math.round(i.updated)}" alt="${esc(i.name)}">` : mdToHtml(i.text || ""))).join("") +
+    `</div></details>`).join("");
 }
 function fill(d, name) {
   const r = (S.runs || []).find(x => x.name === name); if (!r) return;
