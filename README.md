@@ -4,7 +4,7 @@
 
 > *Kacha rasta* (কাঁচা রাস্তা) is Bangla for an unpaved earthen road. These are the roads that connect most villages in Bangladesh, and for several months each year the monsoon turns them into mud, ruts and water-filled potholes.
 
-**Status:** early development. Humanoid stage 1 (Unitree G1 crossing a muddy rutted road) is built, with failure-cause recording and robustness sweeps; no results yet. Study plan: [`docs/study.md`](docs/study.md).
+**Status:** early results. Humanoid stage 1 (Unitree G1 crossing a muddy rutted road) is built, with failure-cause recording and robustness sweeps. First results on the smooth road: the DCM walking controller breaks down between soil wetness LI 0.70 and 0.75; PPO on top of it works only in a narrow band beyond that; nothing yet crosses the rutted road. Current status, numbers and plan: [`docs/status_and_plan.md`](docs/status_and_plan.md). Study design: [`docs/study.md`](docs/study.md).
 
 ---
 
