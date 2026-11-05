@@ -38,7 +38,9 @@ Supported by the data so far (smooth road, 20 test roads per point, one simulato
   0.65, 0.7, 0.75 and 0.8 and 0% at 0.9 and 1.0 (0.85 not tested yet). It covers all of
   DCM's range and extends beyond it to at least 0.8, and it removed run 2's LI 0.5 failure.
   Runs 2 and 3 differ mainly in the start of the training range, so this is close to a
-  matched comparison, but each has one seed.
+  matched comparison, but each has one seed. On the season tables (20 roads each, smooth road)
+  run 3 gets 100% in early monsoon (DCM 100%, run 1 5%), 0% in dry (DCM 65%) and 0% in peak
+  monsoon (every method sinks at LI 1.00); on the rutted road every method gets 0% in every season.
 
 Not supported, do not claim:
 
@@ -129,7 +131,9 @@ the sweep rows, so compare only sweep rows with sweep rows.
    roads, each with its own wetness. Do not make decisions on single readings.
 4. **Training depth is fixed at 15 cm.** Only LI varies in the curriculum. The policy
    performs badly in dry (0%) and early-monsoon (5%) season tables, where depth is 0 and 8 cm.
-   **Hypothesis:** it never saw those conditions.
+   **Hypothesis:** it never saw those conditions. Run 3 (trained from LI 0.5) fixed early monsoon
+   (100%) but dry is still 0% against DCM's 65%: dry has LI -0.2 and no mud layer, outside the
+   training range.
 5. **Policy has no wetness observation and no memory in run 1.** **Hypothesis:** this is why
    it works only in a narrow LI band. Run 2 (`--history 5`) widened the band to LI 0.6-0.8, which
    fits the hypothesis, but it is one seed and not a matched comparison (section 2).
@@ -165,6 +169,10 @@ Each step has a "done when" line. Do one at a time and record the result here.
    steps, same seeds). Optional: `--history 10`. Later: randomise mud depth, cap the
    curriculum (`--wet_max`, not implemented yet), keep periodic checkpoints and evaluate at
    mixed wetness during training (not implemented yet).
+1f. Dry ground: run 3 fails the dry season (0%, DCM 65%). Decide whether the baseline must
+   also work there (it is the reference for normal conditions). Options: extend the training
+   range to LI below 0.5 and randomise mud depth including no mud layer (code change), or
+   report the dry result as a known limit. Also investigate why DCM itself is only 65% in dry.
 2. Freeze the scope in one paragraph (smooth road and soil wetness as the main study; rutted
    road as future work unless step 6 gives a baseline).
 3. Assumption register: complete the table in section 8 with source and effect for every

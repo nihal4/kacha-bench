@@ -57,3 +57,44 @@ Runs 2 and 3 differ only in the start of the training range (and any differences
 to be confirmed), so this comparison is closer to matched, but each has one seed.
 Cost of transport is slightly higher than DCM where both succeed (for example 1.21 against 1.12
 at LI 0.7).
+
+## Season tables (20 episodes per season, road seeds 50000+k, no assist, no observation noise)
+
+Columns: Success, Fell, Left road, Distance (m), Time (s), fall causes (counts of falls).
+Season values: dry LI -0.2 and no mud layer; early monsoon LI 0.70, 8 cm; peak monsoon LI 1.00, 15 cm.
+
+### Smooth road (8.3 m)
+
+| Method | Season | Success | Fell | Left road | Distance | Time | Causes |
+|---|---|---|---|---|---|---|---|
+| scripted controller | dry | 0% | 100% | 0% | 0.61 | 2.2 | no_trigger 14, slipped 6 |
+| scripted controller | early_monsoon | 0% | 100% | 0% | 0.59 | 2.2 | slipped 13, no_trigger 7 |
+| scripted controller | peak_monsoon | 0% | 100% | 0% | 0.49 | 2.1 | sank 17, slipped 2, stuck 1 |
+| DCM capture-point controller | dry | 65% | 35% | 0% | 6.01 | 33.1 | slipped 6, no_trigger 1 |
+| DCM capture-point controller | early_monsoon | 100% | 0% | 0% | 8.30 | 45.4 | - |
+| DCM capture-point controller | peak_monsoon | 0% | 100% | 0% | -0.20 | 1.8 | sank 17, slipped 3 |
+| run 3 | dry | 0% | 100% | 0% | 1.59 | 11.1 | slipped 20 |
+| run 3 | early_monsoon | 100% | 0% | 0% | 8.30 | 47.1 | - |
+| run 3 | peak_monsoon | 0% | 100% | 0% | -0.17 | 1.8 | sank 20 |
+
+### Rutted road (8.3 m)
+
+| Method | Season | Success | Fell | Left road | Distance | Time | Causes |
+|---|---|---|---|---|---|---|---|
+| scripted controller | dry | 0% | 100% | 0% | 0.26 | 1.6 | no_trigger 14, slipped 6 |
+| scripted controller | early_monsoon | 0% | 100% | 0% | 0.31 | 1.8 | slipped 11, no_trigger 9 |
+| scripted controller | peak_monsoon | 0% | 100% | 0% | 0.36 | 1.9 | sank 16, slipped 2, stuck 1, no_trigger 1 |
+| DCM capture-point controller | dry | 0% | 100% | 0% | 0.28 | 3.8 | slipped 20 |
+| DCM capture-point controller | early_monsoon | 0% | 100% | 0% | -0.03 | 3.1 | slipped 19, stuck 1 |
+| DCM capture-point controller | peak_monsoon | 0% | 100% | 0% | -0.21 | 1.8 | sank 14, slipped 6 |
+| run 3 | dry | 0% | 100% | 0% | 0.16 | 3.5 | slipped 18, no_trigger 2 |
+| run 3 | early_monsoon | 0% | 100% | 0% | 0.09 | 3.4 | slipped 20 |
+| run 3 | peak_monsoon | 0% | 100% | 0% | -0.16 | 1.8 | sank 12, slipped 8 |
+
+Reading:
+
+- Smooth road, early monsoon: run 3 matches DCM (100%); run 1 got 5% here.
+- Smooth road, dry: run 3 gets 0% (slips, 1.59 m) where DCM gets 65%. Dry is outside its training range
+  (LI -0.2 and no mud layer, against LI 0.5 to 1.0 at 15 cm depth).
+- Peak monsoon (LI 1.00) fails for every method, as in the LI sweep.
+- Rutted road: 0% for every method in every season, as before.
