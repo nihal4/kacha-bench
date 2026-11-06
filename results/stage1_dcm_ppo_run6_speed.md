@@ -86,3 +86,16 @@ Reading:
 - The policy trains on 25% dry roads (same "dry" as in evaluation: the season only changes the mud and the water fill), yet fails
   on all of them. Not yet explained. Candidates: the corrections learned on mud rely on the mud plates (soft, damped contact)
   and do not suit a rigid floor; dry training roads give a weak learning signal. Neither tested.
+
+## Same diagnostic at LI 0.8 (`g1_trace.py --ground 0.8`, 10 roads, 15 cm mud, 300 s), 2026-11-07
+
+| Mode | Success | Ended at (s) | Distance (m) | Mean speed | Falls |
+|---|---|---|---|---|---|
+| full policy | 100% | 66.4 | 8.30 | 0.149 | - |
+| speed choice only (leg corrections zeroed) | 0% | 7.9 | 0.09 | 0.143 | slipped 9, sank 1 |
+| leg corrections only, speed fixed 0.15 | 100% | 67.9 | 8.30 | 0.148 | - |
+| leg corrections only, speed fixed 0.20 | 10% | 33.9 | 4.28 | 0.194 | slipped 7, left road 2 |
+| plain DCM 0.15 / 0.20 m/s | 0% / 0% | 10.2 / 5.2 | 0.25 / -0.08 | | slipped 10 / 10 |
+
+At LI 0.8 both parts are needed: the leg corrections (without them 0%) and the slow speed (at 0.20 only 10%). On dry ground the
+leg corrections do harm (previous table). So the corrections the policy learned are specific to mud.

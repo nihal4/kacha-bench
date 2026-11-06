@@ -20,6 +20,7 @@ import numpy as np
 
 SU_LL = 1.7e3      # Pa, undrained shear strength at the liquid limit (Sharma & Bora 2003)
 SU_RATIO = 100.0   # strength at PL / strength at LL (Sharma & Bora 2003; Sharma & Sridharan 2018)
+MU_MAX = float(__import__("os").environ.get("KACHA_MU_MAX", 2.0))   # cap on the sole-ground friction coefficient (G1 flat foot); env var for experiments
 MU_WET_CLAY = 0.3  # surface friction of very wet clay (Birch et al. 2016: tan 16-28 deg)
 
 
@@ -354,7 +355,7 @@ class FlatFootMud:
             depth_in = min(max(d, 0.0), p.depth)
             Fh = rect_lateral_capacity(depth_in, p, B, L)
             model.geom_friction[self.plates[k], 0] = float(
-                np.clip(max(p.mu_surface, Fh / max(N, 1.0)), p.mu_surface, 2.0))
+                np.clip(max(p.mu_surface, Fh / max(N, 1.0)), p.mu_surface, MU_MAX))
             if d > 0.0 and N <= 0.0:           # in the mud, lifting or swinging
                 mujoco.mj_objectVelocity(model, data, mujoco.mjtObj.mjOBJ_BODY, b, self._vel, 0)
                 v, F = self._vel[3:], np.zeros(3)
