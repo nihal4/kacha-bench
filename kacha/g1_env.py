@@ -585,6 +585,7 @@ class G1MudRoadEnv(gym.Env):
             hl.active, hl.ambient[:], hl.diffuse[:], hl.specular[:] = 1, 0.7, 0.8, 0.1
             self.model.vis.rgba.fog[:] = self.model.vis.rgba.haze[:] = (0.62, 0.75, 0.88, 1.0)
         self._renderer.update_scene(self.data, camera=self._cam)
+        if getattr(self, "cheap_render", False):
             for f in (mujoco.mjtRndFlag.mjRND_SHADOW, mujoco.mjtRndFlag.mjRND_REFLECTION,
                       mujoco.mjtRndFlag.mjRND_SKYBOX, mujoco.mjtRndFlag.mjRND_HAZE):
                 self._renderer.scene.flags[f] = 0
