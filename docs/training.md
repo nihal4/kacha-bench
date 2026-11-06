@@ -160,3 +160,6 @@ kacha job peak_monsoon 3000000 "--robot g1 --base dcm --road smooth --wet_start 
   for every method in a comparison. Reason: at LI 0.8 the DCM crosses at 0.1 m/s but needs about 200 s
   (`results/dcm_slow_walking_check.md`).
 - Run names get `-spd` and `-t<S>` tags (`kacha job ... "--speed_action --max_seconds 300"`).
+- Progress videos are lit (soft light from the camera, no shadows, sky background) and carry a text overlay: run name,
+  steps trained, clip and road seed, the road's mud (wetness LI, strength, depth, or "dry ground"), live time, distance
+  and walking speed, and at the end of each clip FELL / LEFT THE ROAD / OUT OF TIME / REACHED THE END.

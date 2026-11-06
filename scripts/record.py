@@ -14,6 +14,44 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("MUJOCO_GL", "egl")
 
 TEST_SEEDS = (7, 8, 9)
+
+
+def _font(size):
+    try:
+        import matplotlib
+        from PIL import ImageFont
+        return ImageFont.truetype(os.path.join(matplotlib.get_data_path(), "fonts", "ttf", "DejaVuSans.ttf"), size)
+    except Exception:
+        from PIL import ImageFont
+        return ImageFont.load_default()
+
+
+def overlay(frame, lines, big=None):
+    """Draw text lines on a dark translucent box at the top-left of the frame (copy)."""
+    import numpy as np
+    from PIL import Image, ImageDraw
+    img = Image.fromarray(frame).convert("RGBA")
+    f = _font(max(12, frame.shape[0] // 28))
+    pad, lh = 8, f.size + 4
+    box = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    d = ImageDraw.Draw(box)
+    w = max(d.textlength(t, font=f) for t in lines) + 2 * pad
+    d.rectangle([0, 0, w, lh * len(lines) + 2 * pad], fill=(0, 0, 0, 150))
+    for i, t in enumerate(lines):
+        d.text((pad, pad + i * lh), t, font=f, fill=(255, 255, 255, 255))
+    if big:
+        text, col = big
+        fb = _font(frame.shape[0] // 9)
+        tw = d.textlength(text, font=fb)
+        d.rectangle([(img.width - tw) / 2 - 16, img.height * 0.40, (img.width + tw) / 2 + 16, img.height * 0.40 + fb.size + 24],
+                    fill=(0, 0, 0, 170))
+        d.text(((img.width - tw) / 2, img.height * 0.40 + 8), text, font=fb, fill=col + (255,))
+    return np.array(Image.alpha_composite(img, box).convert("RGB"))
+
+
+def _li(su_kpa):
+    import math
+    return 1.0 - math.log10(su_kpa / 1.7) / 2.0      # inverse of su = 1.7 kPa * 100^(1 - LI)
 MAX_STEPS = 500          # 10 s of walking per clip
 G1_MAX_STEPS = 3000      # g1: the whole road (60 s); success = reached the end
 
@@ -66,7 +104,9 @@ def record(run, out, best=False, seeds=TEST_SEEDS, check=0, noise=False):
     tmp = out[:-4] + ".part.mp4"
     writer = imageio.get_writer(tmp, fps=12, macro_block_size=8)
     results = []
-    for seed in seeds:
+    run_name = os.path.basename(os.path.normpath(run)).replace("g1-road-", "")
+    steps_k = f"{model.num_timesteps / 1000:,.0f}k steps"
+    for ci, seed in enumerate(seeds, 1):
         env = mk()
         obs, _ = env.reset(seed=seed)
         info, frame, done = {}, None, False
@@ -75,7 +115,15 @@ def record(run, out, best=False, seeds=TEST_SEEDS, check=0, noise=False):
             obs, _, te, tr, info = env.step(a[0])
             done = te or tr
             if t % 4 == 0 or done:
-                frame = env.render()
+                frame = raw = env.render()
+                if g1:
+                    ms = env.mud_summary()
+                    cond = ("dry ground, no mud" if ms["su_kpa"] is None else
+                            f"mud: wetness LI {_li(ms['su_kpa']):.2f} | strength {ms['su_kpa']:.1f} kPa | depth {ms['depth'] * 100:.0f} cm")
+                    frame = overlay(frame, [f"{run_name}  |  {steps_k}",
+                                            f"clip {ci}/{len(seeds)}  road seed {seed}  ({cfg.get('season', '')} setting)",
+                                            cond,
+                                            f"time {env.t:5.1f} s | distance {info.get('distance', 0.0):+.2f} m of 8.3 | speed {env.speed:.2f} m/s"])
                 writer.append_data(frame)
             if done:
                 break
@@ -84,6 +132,12 @@ def record(run, out, best=False, seeds=TEST_SEEDS, check=0, noise=False):
             info["is_success"] = walked
         ok = bool(info.get("is_success", False))
         results.append(ok)
+        if g1:
+            why = "REACHED THE END" if ok else ("FELL" if info.get("fell") else
+                  "LEFT THE ROAD" if info.get("off_road") else "OUT OF TIME")
+            frame = overlay(raw, [f"{run_name}  |  {steps_k}", f"clip {ci}/{len(seeds)}  road seed {seed}", cond,
+                                    f"distance {info.get('distance', 0.0):+.2f} m | time {env.t:.1f} s"],
+                            big=(why, (60, 200, 80) if ok else (230, 70, 60)))
         mark = frame.copy()
         mark[:10] = mark[-10:] = mark[:, :10] = mark[:, -10:] = (40, 180, 60) if ok else (200, 50, 50)
         for _ in range(20):
