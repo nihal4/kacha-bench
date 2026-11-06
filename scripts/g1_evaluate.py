@@ -35,7 +35,7 @@ from kacha.g1_policies import run_episode  # noqa: E402
 TEST_SEED = 50_000
 # time to cross the 8.3 m road; the same for every method (the DCM controller walks at
 # 0.2 m/s and needs about 45 s)
-MAX_SECONDS = 60.0
+MAX_SECONDS = float(os.environ.get("KACHA_MAX_SECONDS", 60.0))   # time to cross the road, the same for every method (env var to change)
 
 
 # ----------------------------------------------------------------------------- evaluation

@@ -34,7 +34,7 @@ import numpy as np  # noqa: E402
 from kacha.terrain import ROADS  # noqa: E402
 
 SWEEP_SEED = 70_000
-MAX_SECONDS = 60.0      # time to cross the road, the same for every method
+MAX_SECONDS = float(os.environ.get("KACHA_MAX_SECONDS", 60.0))   # time to cross the road, the same for every method (env var to change)
 AXES = ("LI", "su_kpa", "depth", "mu", "beta", "fill")
 CAUSES = ("hidden_water", "stuck", "sank", "slipped", "no_trigger")
 GAIT = ("step_length", "cadence_per_min", "double_support", "foot_lift", "stance_sinkage",
