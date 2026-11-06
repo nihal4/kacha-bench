@@ -29,6 +29,9 @@ case "${1:-help}" in
         case "$EXTRA" in *"--road smooth"*) T="$T-smooth" ;; esac
         W=$(echo "$EXTRA" | grep -oE -- '--wet_start [0-9.]+' | awk '{printf "%g", $2}')
         [ -n "$W" ] && T="$T-wet$W"
+        case "$EXTRA" in *--dr\ *|*--dr) T="$T-dr" ;; esac
+        M=$(echo "$EXTRA" | grep -oE -- '--wet_max [0-9.]+' | awk '{printf "%g", $2}')
+        [ -n "$M" ] && T="$T-max$M"
         case "$EXTRA" in *--scan*) T="$T-scan" ;; esac
         H=$(echo "$EXTRA" | grep -oE -- '--history [0-9]+' | awk '{print $2}')
         [ -n "$H" ] && [ "$H" -gt 1 ] && T="$T-h$H"
