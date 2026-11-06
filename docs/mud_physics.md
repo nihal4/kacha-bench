@@ -153,3 +153,31 @@ validate the equations against measured mud; see Section 8.
 - Hasnat, A. et al. (2020). Improvement of bearing capacity of clay soil using fly ash. *AIUB J. Sci. Eng.* 19(2). https://ajse.aiub.edu/index.php/ajse/article/download/85/68
 - Islam, M. S., Siddique, A. & Muqtadir, A. (2004). Mechanical properties of soft organic Dhaka clay. *J. Civil Eng. (IEB)* 32(2). https://mail.jce-ieb.org/doc_file/ce320205.pdf
 - Alam, M. J., Karim, M. E. & Hoque, M. S. (2020). Causes of damage of rural road in coastal areas of Bangladesh. *Geotech. Eng. J. SEAGS & AGSSEA* 51(4). https://ph01.tci-thaijo.org/index.php/SEAGS_AGSSEA_Journal/article/view/258681
+
+## 8. What the model does to a G1 foot as the soil gets wetter (design review, 2026-11-06)
+
+Raised by the author: in heavy monsoon the mud is sticky and the leg sinks and gets stuck (water-filled holes too), it does
+not simply get slippery like a wet tile floor. Computed from the model's own equations (assumed sole 9 x 22 cm, 343 N on one
+foot, 15 cm mud layer; `rect_bearing_capacity`, `rect_lateral_capacity`, `breakout_ratio`). Foot size and the equations are
+assumptions; the figures show what the model says, not what a real road does.
+
+| LI | su (kPa) | Sinkage to carry the weight | Sideways grip (N) and as friction coefficient | Suction capacity (N, share of weight) |
+|---|---|---|---|---|
+| 0.5 | 17.0 | 0 | 337 N, 1.0 | 899 N, 2.6 |
+| 0.7 | 6.8 | 0 | 134 N, 0.39 | 432 N, 1.3 |
+| 0.8 | 4.3 | 0 | 85 N, 0.25 (floor 0.3) | 272 N, 0.8 |
+| 0.85 | 3.4 | 0 | 67 N, 0.2 (floor 0.3) | 212 N, 0.6 |
+| 0.9 | 2.7 | 2.4 cm | 71 N | 211 N, 0.6 |
+| 1.0 | 1.7 | to the hardpan (15 cm) | 112 N | 203 N, 0.6 |
+
+Reading (model behaviour):
+
+- From LI 0.5 to 0.85 the mud acts as a firm but increasingly slippery surface: no sinkage, grip falling from about 1.0 to
+  the 0.3 floor. This is the "more monsoon, more slippery" behaviour, and it is a consequence of su falling about 5 times
+  while the foot still sits on top. It is soil failing in shear under a sliding foot, not a low-friction film.
+- The foot sinks only from LI 0.88. Suction is largest in the firm band (relative to weight) and falls with su, so heavy
+  mud has less suction capacity in absolute terms, and "stuck" is rare in the sweeps (0 to 5% of falls).
+- Whether real heavy mud sticks more, and from which wetness the foot sinks, is not validated. Likely weak points: suction
+  proportional to su with no time or rate dependence, a single peak value (beta_max 0.6, assumed), no slurry-over-firm-base layering.
+- Water-filled holes with hidden depth exist in the model (`water.py`) but the smooth road used for the baseline has none,
+  and the rutted road fails at the start for geometry reasons, so holes have not been tested yet.
