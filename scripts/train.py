@@ -111,7 +111,7 @@ def parse():
 
 
 def make_env(season, scan, seed, reward="v2", robot="go1", assist=0.0, reference=True,
-             history=1, base="scripted", road="rutted"):
+             history=1, base="scripted", road="rutted", mud=None, regen_every=20):
     def _f():
         if robot == "g1":
             from kacha.g1_env import G1MudRoadEnv
@@ -121,7 +121,8 @@ def make_env(season, scan, seed, reward="v2", robot="go1", assist=0.0, reference
             return G1MudRoadEnv(season="dry" if season == "none" else season, seed=seed,
                                 assist=assist, reference=reference, height_scan=scan,
                                 history=history, base=base, road=ROADS[road],
-                                max_seconds=60.0 if base == "dcm" else 40.0)
+                                max_seconds=60.0 if base == "dcm" else 40.0,
+                                mud=mud, regen_every=regen_every)
         from kacha.walk_env import Go1WalkEnv
         return Go1WalkEnv(season=season, seed=seed, height_scan=scan, reward=reward)
     return _f
@@ -185,8 +186,19 @@ def main():
                          assist=1.0 if use_assist else 0.0, **g1_kw) for i in range(cfg["n_envs"])])
     venv = VecMonitor(venv, info_keywords=("is_success", "distance"))
     # evaluation never uses the balance assist
+    # periodic evaluation: the wetness range being trained (not the season's LI 1.00, which
+    # nobody passes), so the dashboard's "Walked (eval)" and best_model mean something
+    from kacha.mud import SEASONS
+    eval_mud = None
+    if g1 and args.wet_start is not None:
+        eval_mud = dict(LI=args.wet_max if args.wet_max is not None else
+                        SEASONS.get(args.season, {}).get("LI", args.wet_start), LI_lo=args.wet_start)
+        if args.dr:
+            eval_mud.update(depth_lo=args.depth_range[0], depth_hi=args.depth_range[1],
+                            p_dry=args.dry_share)
     eval_env = VecMonitor(DummyVecEnv([make_env(args.season, args.scan, 10_000 + args.seed,
-                                                args.reward, args.robot, assist=0.0, **g1_kw)]),
+                                                args.reward, args.robot, assist=0.0,
+                                                mud=eval_mud, regen_every=1, **g1_kw)]),
                           info_keywords=("is_success", "distance"))
 
     resumed = False

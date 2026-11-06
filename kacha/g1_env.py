@@ -568,11 +568,16 @@ class G1MudRoadEnv(gym.Env):
 
     def render(self):
         if self._renderer is None:
-            self._renderer = mujoco.Renderer(self.model, 720, 1280)
+            h, w = getattr(self, "render_size", (720, 1280))
+            self._renderer = mujoco.Renderer(self.model, h, w)
             self._cam = mujoco.MjvCamera()
             self._cam.distance, self._cam.elevation, self._cam.azimuth = 3.2, -14, 125
         self._cam.lookat[:] = self.data.qpos[:3] + np.array([0, 0, -0.15])
         self._renderer.update_scene(self.data, camera=self._cam)
+        if getattr(self, "cheap_render", False):      # no shadows/reflections: much faster
+            for f in (mujoco.mjtRndFlag.mjRND_SHADOW, mujoco.mjtRndFlag.mjRND_REFLECTION,
+                      mujoco.mjtRndFlag.mjRND_SKYBOX, mujoco.mjtRndFlag.mjRND_HAZE):
+                self._renderer.scene.flags[f] = 0
         return self._renderer.render().copy()
 
     def close(self):

@@ -44,8 +44,9 @@ def last_eval(run):
 def start_video(run, step_k, py):
     os.makedirs(os.path.join(run, "progress"), exist_ok=True)
     out = os.path.join(run, "progress", f"step_{step_k:05d}k.mp4")
+    log = open(out[:-4] + ".log", "w")          # why a video failed, if it did
     proc = subprocess.Popen([py, os.path.join(REPO, "scripts", "record.py"), "--run", run, "--out", out],
-                            cwd=REPO, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                            cwd=REPO, stdout=log, stderr=subprocess.STDOUT,
                             env=dict(os.environ, MUJOCO_GL=os.environ.get("MUJOCO_GL", "egl")),
                             preexec_fn=lambda: os.nice(10))
     return proc, out, time.time()

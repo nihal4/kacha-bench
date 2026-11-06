@@ -136,3 +136,13 @@ Example (the next baseline run, see `docs/status_and_plan.md`):
 ```
 kacha job peak_monsoon 3000000 "--robot g1 --base dcm --road smooth --wet_start 0.4 --wet_max 0.85 --dr --history 5 --then-evaluate"
 ```
+
+## Dashboard eval and progress videos (changed 2026-11-06)
+
+- The periodic evaluation during training (dashboard "Walked (eval)", `best_model.zip`) now uses the
+  wetness range being trained (LI from `--wet_start` to `--wet_max`/season, with the `--dr` depth
+  distribution), one fresh road per episode. Before, it ran at the season's LI 1.00, which no policy
+  passes, so it always read 0%. It is still only a progress signal: judge policies by the LI sweeps.
+- Progress videos (`scripts/record.py`) are now cheap: no shadows, reflections, sky or plants,
+  360x640, 12 fps, filmed at the training wetness range. A video takes about 35 s. The watcher writes
+  `runs/<run>/progress/step_<N>k.log` with the recorder's output, so a failure can be diagnosed.

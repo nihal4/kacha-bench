@@ -15,7 +15,7 @@ os.environ.setdefault("MUJOCO_GL", "egl")
 
 TEST_SEEDS = (7, 8, 9)
 MAX_STEPS = 500          # 10 s of walking per clip
-G1_MAX_STEPS = 2000      # g1: the whole road (up to 40 s); success = reached the end
+G1_MAX_STEPS = 3000      # g1: the whole road (60 s); success = reached the end
 
 
 def record(run, out, best=False, seeds=TEST_SEEDS):
@@ -26,7 +26,19 @@ def record(run, out, best=False, seeds=TEST_SEEDS):
     g1 = cfg.get("robot") == "g1"
     if g1:
         from kacha.g1_env import G1MudRoadEnv, env_kwargs_from_config
-        mk = lambda: G1MudRoadEnv(seed=0, look=True, obs_noise=False, **env_kwargs_from_config(cfg))
+        kw = env_kwargs_from_config(cfg)
+        ws = cfg.get("g1_wet_start")
+        if ws is not None:                       # film at the wetness range being trained
+            from kacha.mud import SEASONS
+            top = cfg.get("g1_wet_max") or SEASONS.get(cfg.get("season"), {}).get("LI", ws)
+            kw["mud"] = dict(LI=top, LI_lo=ws)
+            if cfg.get("g1_dr"):
+                kw["mud"].update(depth_lo=cfg["g1_dr_depth_range"][0],
+                                 depth_hi=cfg["g1_dr_depth_range"][1], p_dry=cfg["g1_dr_dry_share"])
+        def mk():
+            e = G1MudRoadEnv(seed=0, look=False, obs_noise=False, max_seconds=60.0, **kw)
+            e.render_size, e.cheap_render = (360, 640), True    # low graphics: fast
+            return e
     else:
         from kacha.walk_env import Go1WalkEnv
         mk = lambda: Go1WalkEnv(season=cfg["season"], height_scan=cfg["scan"], seed=0,
@@ -37,7 +49,7 @@ def record(run, out, best=False, seeds=TEST_SEEDS):
     norm.training = False
     model = PPO.load(m_path, device="cpu")
     tmp = out[:-4] + ".part.mp4"
-    writer = imageio.get_writer(tmp, fps=25, macro_block_size=8)
+    writer = imageio.get_writer(tmp, fps=12, macro_block_size=8)
     results = []
     for seed in seeds:
         env = mk()
@@ -47,7 +59,7 @@ def record(run, out, best=False, seeds=TEST_SEEDS):
             a, _ = model.predict(norm.normalize_obs(obs[None]), deterministic=True)
             obs, _, te, tr, info = env.step(a[0])
             done = te or tr
-            if t % 2 == 0 or done:
+            if t % 4 == 0 or done:
                 frame = env.render()
                 writer.append_data(frame)
             if done:
