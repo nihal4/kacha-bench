@@ -4,6 +4,8 @@ Start with [`docs/status_and_plan.md`](docs/status_and_plan.md): what the projec
 what is done, the numbers so far, known problems and the step-by-step plan. Raw results are
 in [`results/`](results/).
 
+The current next steps, ideas and open decisions are in [`docs/next_experiments.md`](docs/next_experiments.md).
+
 Quick rules:
 
 - Report only numbers that are in `results/` or a run folder; label guesses as hypotheses.

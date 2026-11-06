@@ -166,6 +166,8 @@ the sweep rows, so compare only sweep rows with sweep rows.
 
 ## 6. Plan
 
+Next experiments, ideas (speed output, arms for balance, mud-model review, rutted-road ladder) and the open questions for the author: [`next_experiments.md`](next_experiments.md).
+
 Each step has a "done when" line. Do one at a time and record the result here.
 
 1. DONE: run 2 (memory) finished and compared with run 1 (`results/stage1_dcm_ppo_run2_memory.md`).
