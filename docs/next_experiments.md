@@ -8,7 +8,9 @@ Everything below is a plan or an idea, not a result, unless it says DONE. Ideas 
 Ground rules: one change per training run; the old runs stay valid as the earlier baseline; any change to the rules of the
 test (time limit, conditions) applies to every method in the comparison and is decided before looking at results.
 
-## A. Policy-chosen walking speed and a longer time limit (author) - built, run pending
+## A. Policy-chosen walking speed and a longer time limit (author) - DONE as run 6, see results/stage1_dcm_ppo_run6_speed.md
+
+Result: LI 0.5 to 0.8 all 100% (20 roads each) on the smooth road; LI 0.9 and 1.0 still 0%; dry ground 0% (new weak point). The text below is the plan as written before the run.
 
 - Why: the DCM base walks at a fixed 0.2 m/s and the policy cannot change it, and the limit is 60 s. At LI 0.8 the plain
   DCM falls at 0.2 m/s but crosses all 6 roads at 0.1 m/s with 300 s (`results/dcm_slow_walking_check.md`). People walk

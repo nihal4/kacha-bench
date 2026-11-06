@@ -580,11 +580,11 @@ class G1MudRoadEnv(gym.Env):
             self._cam = mujoco.MjvCamera()
             self._cam.distance, self._cam.elevation, self._cam.azimuth = 3.2, -14, 125
         self._cam.lookat[:] = self.data.qpos[:3] + np.array([0, 0, -0.15])
-        self._renderer.update_scene(self.data, camera=self._cam)
         if getattr(self, "cheap_render", False):      # no shadows/reflections: much faster
             hl = self.model.vis.headlight               # soft light from the camera, no shadows
             hl.active, hl.ambient[:], hl.diffuse[:], hl.specular[:] = 1, 0.7, 0.8, 0.1
             self.model.vis.rgba.fog[:] = self.model.vis.rgba.haze[:] = (0.62, 0.75, 0.88, 1.0)
+        self._renderer.update_scene(self.data, camera=self._cam)
             for f in (mujoco.mjtRndFlag.mjRND_SHADOW, mujoco.mjtRndFlag.mjRND_REFLECTION,
                       mujoco.mjtRndFlag.mjRND_SKYBOX, mujoco.mjtRndFlag.mjRND_HAZE):
                 self._renderer.scene.flags[f] = 0
