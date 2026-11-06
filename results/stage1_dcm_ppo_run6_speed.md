@@ -62,3 +62,27 @@ see next_experiments.md section E).
   speeds) does not suit dry ground; 25% dry roads in training may be too few for the new action; dry may need its own speed range.
 - Next: test dry (record `--check` on dry roads, speed trace), LI 0.85 and 0.88 sweep, and the matched ablation (speed output
   with the 60 s limit, or 300 s without the speed output) to separate the two changes.
+
+## Dry ground diagnostic (`g1_trace.py --ground dry`, 10 roads, 300 s, no noise, seeds 900+k), 2026-11-07
+
+| Mode | Success | Ended at (s) | Distance (m) | Mean speed (m/s) | Falls |
+|---|---|---|---|---|---|
+| full policy | 0% | 8.2 | 0.90 | 0.131 | slipped 7, no_trigger 3 (all tipped) |
+| speed choice only (leg corrections zeroed) | 50% | 30.8 | 4.57 | 0.151 | slipped 3, no_trigger 2 |
+| leg corrections only, speed fixed 0.15 | 0% | 7.5 | 0.87 | 0.134 | slipped 7, no_trigger 2, left road 1 |
+| leg corrections only, speed fixed 0.20 | 0% | 4.0 | 0.30 | 0.151 | slipped 8, no_trigger 1, left road 1 |
+| plain DCM, 0.15 m/s | 40% | 29.0 | 4.14 | 0.146 | slipped 3, no_trigger 3 |
+| plain DCM, 0.20 m/s | 60% | 28.6 | 5.17 | 0.193 | slipped 4 |
+
+(The "leg corr" column in the raw output is the size of the policy's raw leg output; it is also printed for the modes where the
+corrections are zeroed, so it does not describe those runs.)
+
+Reading:
+
+- The learned leg corrections cause the dry failures: with them on, 0% at any speed; with them zeroed, the policy's own speed
+  choice gives 50%, about the same as plain DCM (40 to 60%). The speed choice is not the problem.
+- Dry ground is hard for the plain DCM too (40 to 60% on 10 roads, 65% on 20 earlier), with falls mostly labelled slipped.
+  So dry has a ceiling from the base controller that is separate from what the policy adds.
+- The policy trains on 25% dry roads (same "dry" as in evaluation: the season only changes the mud and the water fill), yet fails
+  on all of them. Not yet explained. Candidates: the corrections learned on mud rely on the mud plates (soft, damped contact)
+  and do not suit a rigid floor; dry training roads give a weak learning signal. Neither tested.
