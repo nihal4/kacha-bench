@@ -24,6 +24,13 @@ Result: LI 0.5 to 0.8 all 100% (20 roads each) on the smooth road; LI 0.9 and 1.
 - Done when: LI sweep 0.5 to 0.9 and season tables for this run and for DCM and run 5 at 300 s; decision rule: crossing
   LI 0.8 on at least 90% of 20 roads counts as solving it.
 
+## A2. Why does run 6 fall on dry ground? (0%, DCM 65%) - diagnostic built, run on the PC pending
+
+`scripts/g1_trace.py --run RUN --ground dry --episodes 10` runs the same dry roads six ways: the full policy; its speed
+choice with the leg corrections zeroed; its leg corrections with the speed fixed at 0.15 or 0.20 m/s; and plain DCM at
+0.15 and 0.20. The table says whether the leg corrections, the chosen speed, or the base itself is what falls. Evaluation
+only (a few minutes). `--ground 0.8` runs the same split on LI 0.8 mud for comparison.
+
 ## B. Is run 5's loss of LI 0.8 a training-mix gap? - evaluation only, pending
 
 - Calculation (not a measurement): only about 3% of run 5's training roads are in the hard cell (LI >= 0.78 and depth >= 12 cm).

@@ -55,7 +55,7 @@ def main():
                 spd.append(float(env.speed))
             ok += bool(info.get("is_success", False)); tend.append(env.t); dist.append(info.get("distance", 0.0))
             if not info.get("is_success", False):
-                c = info.get("cause") or ("left road" if info.get("off_road") else "timeout")
+                c = f"{info.get('outcome')}/{info.get('fall_mode') or '-'}"
                 causes[c] = causes.get(c, 0) + 1
             env.close()
         print(f"{name:18s} {100 * ok / a.episodes:7.0f}% {np.mean(tend):13.1f} {np.mean(dist):13.2f} {np.mean(spd):11.3f} {np.mean(mag):16.3f}  {causes or '-'}", flush=True)
