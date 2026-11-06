@@ -102,6 +102,8 @@ def parse():
         tags += ("-smooth" if args.road == "smooth" else "")
         tags += (f"-wet{args.wet_start:g}" if args.wet_start is not None else "")
         tags += ("-dr" if args.dr else "") + (f"-max{args.wet_max:g}" if args.wet_max is not None else "")
+        if args.dr and (args.dry_share != 0.25 or list(args.depth_range) != [0.04, 0.15]):
+            tags += f"-d{args.depth_range[0]:g}-{args.depth_range[1]:g}-p{args.dry_share:g}"
         tags += ("-scan" if args.scan else "") + (f"-h{args.history}" if args.history > 1 else "")
         args.name = args.name or f"g1-road-{args.season}{tags}-s{args.seed}"
     else:

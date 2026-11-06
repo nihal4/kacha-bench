@@ -33,6 +33,11 @@ case "${1:-help}" in
         M=$(echo "$EXTRA" | grep -oE -- '--wet_max [0-9.]+' | awk '{printf "%g", $2}')
         [ -n "$M" ] && T="$T-max$M"
         case "$EXTRA" in *--scan*) T="$T-scan" ;; esac
+        if [ -n "$(echo "$EXTRA" | grep -oE -- '--depth_range|--dry_share')" ]; then
+            DR=$(echo "$EXTRA" | grep -oE -- '--depth_range [0-9.]+ [0-9.]+' | awk '{printf "%g-%g", $2, $3}'); DR=${DR:-0.04-0.15}
+            DP=$(echo "$EXTRA" | grep -oE -- '--dry_share [0-9.]+' | awk '{printf "%g", $2}'); DP=${DP:-0.25}
+            [ "$DR-$DP" != "0.04-0.15-0.25" ] && T="$T-d$DR-p$DP"
+        fi
         H=$(echo "$EXTRA" | grep -oE -- '--history [0-9]+' | awk '{print $2}')
         [ -n "$H" ] && [ "$H" -gt 1 ] && T="$T-h$H"
         NAME="g1-road-$SEASON$T-s${SEED:-0}" ;;

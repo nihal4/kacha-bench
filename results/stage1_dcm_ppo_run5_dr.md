@@ -84,3 +84,27 @@ once copied. Dry LI -0.2 with no mud layer; early monsoon LI 0.70, 8 cm; peak mo
   `record.py --check 20`, no observation noise): 19 of 20 walked, all 7 dry roads walked; the one fall was at 3.9 kPa
   (about LI 0.82 to 0.85). Not a result: one seed, drawn from the training distribution.
 - Fixed on 2026-11-06: progress videos and `record.py` filmed the rutted road (all 0%) instead of the run's road.
+
+## Continued to 6M steps: smooth-road LI sweep (20 roads per LI, road seeds 70000+k, base peak_monsoon 15 cm)
+
+Copied from the PC's `sweep_LI_smooth_summary.md`, 2026-11-06. DCM rows are the same as in the earlier files.
+
+| LI | DCM | Run 5, 6M | Fell | Left road | Distance (m) | Main cause |
+|---|---|---|---|---|---|---|
+| 0.5 | 100% | 40% (22-61) | 0% | 60% | 8.18 | left the road (walked on, drifted off) |
+| 0.6 | 100% | 100% (84-100) | 0% | 0% | 8.30 | - |
+| 0.65 | 100% | 100% | 0% | 0% | 8.30 | - |
+| 0.7 | 100% | 100% | 0% | 0% | 8.30 | - |
+| 0.75 | 0% | 100% | 0% | 0% | 8.30 | - |
+| 0.8 | 0% | 0% (0-16) | 100% | 0% | 1.78 | slipped 100% |
+| 0.9 | 0% | 0% | 100% | 0% | 0.09 | slipped 80%, stuck 20% |
+| 1.0 | 0% | 0% | 100% | 0% | -0.07 | sank 85% |
+
+Reading:
+
+- Works at LI 0.6 to 0.75 (100%, same as run 3 and run 2 there). LI 0.8 is still 0% after 6M steps, while run 2 (memory,
+  wet 0.7 start, no DR) and run 3 (wet 0.5) got 100% at 0.8. So domain randomisation plus the wider range
+  bought dry ground (0% in run 3, 50% here) and lost LI 0.8. One seed each, so this is a trade seen once, not a proven one.
+- New weakness at LI 0.5 (40%): all 12 non-successes left the road after walking 8 m, which is steering drift on firm
+  mud, not a fall. Run 3 got 100% at 0.5.
+- Peak monsoon (LI 1.00) fails as before.
