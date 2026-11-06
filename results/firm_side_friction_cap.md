@@ -20,3 +20,20 @@ makes the foot catch at touchdown. Foot-ground friction of rubber on firm soil i
 against literature). Affects only firm mud: the lateral grip is about 1.0 at LI 0.5 and lower for wetter mud, so results at
 LI >= 0.5 do not change. Run 6 trained on LI 0.4 and up, so its firm training roads had grip between 1 and 2 while dry ground has 1.0;
 a possible reason the policy's leg corrections fail on dry ground (hypothesis, test below).
+
+## Run 6 with the cap at 2.0 and at 1.0 (PC, 20 roads per LI, smooth road, 300 s), 2026-11-07
+
+| LI | MU_MAX 2.0 | MU_MAX 1.0 |
+|---|---|---|
+| 0.4 | 100%, cost of transport 0.85 | 100%, 0.88 |
+| 0.5 | 100%, 0.84 | 100%, 0.87 |
+| 0.6 | 100%, 0.86 | 100%, 0.89 |
+
+Result: run 6 does not depend on the extra grip (success and gait are the same, cost of transport 3 to 4% higher). The hypothesis
+that its dry failures come from having trained on grip between 1 and 2 is not supported. The cap itself remains a model artifact
+for plain DCM at LI <= 0.3 (table above) and should be lowered when the model is next revised; it does not affect results at
+LI >= 0.4 for this policy.
+
+Open for dry ground: the model's "dry" path has no mud plates at all (rigid floor, default contact), while every mud road has
+plates (soft, damped contact). Run 6 crosses plate-covered ground from LI 0.4 up but fails on the bare floor. Next test: run 6 on very firm
+mud with plates (LI -0.2 to 0.3, cap 1.0), which has grip like dry ground but the plate contact.
