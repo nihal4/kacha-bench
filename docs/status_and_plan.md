@@ -47,7 +47,9 @@ Supported by the data so far (smooth road, 20 test roads per point, one simulato
 - Run 5 (domain randomisation: random mud depth with 25% dry roads, curriculum from LI 0.4 to 0.85,
   history 5, one seed): dry 50% (DCM 65%, run 3 0%), early monsoon 100%; LI sweep 100% at 0.5 to 0.75
   but **0% at 0.8** (run 3 had 100%). So the dry gap is closed at the cost of the wettest range; the
-  cause is not isolated (three differences from run 3, one seed).
+  cause is not isolated (three differences from run 3, one seed). Snapshot sweep: LI 0.8 is 0% at
+  every snapshot (1.5M to 3M) and LI 0.75 only reached 100% at 3M, so the run looks under-trained for
+  the wider training distribution, not regressed.
 
 Not supported, do not claim:
 
@@ -192,10 +194,11 @@ Each step has a "done when" line. Do one at a time and record the result here.
    falls below body weight at about LI 0.86, so LI 1.00 (peak monsoon as defined) is probably
    a physical limit for this foot; decide whether to redefine peak monsoon (for example
    LI 0.85) or report LI 1.00 as that limit.
-   Run 5 result: dry 50% and LI 0.5-0.75 at 100%, but LI 0.8 lost. Next: sweep the snapshots
-   (`RUN/snapshots/`) at LI 0.75, 0.8, 0.85 to see whether 0.8 was lost late in training, then a
-   run with depths concentrated on the season depths (`--depth_range 0.08 0.15`, `--dry_share 0.2`)
-   and more steps (5M).
+   Run 5 result: dry 50% and LI 0.5-0.75 at 100%, but LI 0.8 at 0%. The snapshot sweep shows it was
+   never learned (0% at 1.5M to 3M) and LI 0.75 appeared only at 3M: under-trained. Next: continue the
+   same run to 6M steps (copy the folder to the `-dr-max0.85` name, delete `results/DONE`, set the
+   job to 6000000). If LI 0.8 is still 0%, retry with depths concentrated on the season depths
+   (`--depth_range 0.08 0.15`, `--dry_share 0.2`).
 2. Freeze the scope in one paragraph (smooth road and soil wetness as the main study; rutted
    road as future work unless step 6 gives a baseline).
 3. Assumption register: complete the table in section 8 with source and effect for every

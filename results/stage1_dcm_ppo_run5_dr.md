@@ -47,3 +47,19 @@ LI 0.85 was not in this sweep. Rutted-road LI sweep not copied yet (expected 0% 
 - It lost LI 0.8 (100% to 0%) on the 15 cm mud of the sweep. The runs differ in three ways (domain randomisation, start LI 0.4 against 0.5, ceiling 0.85 against 1.00) and each has one seed,
   so the cause is not isolated. **Hypothesis:** the hardest condition (deep mud at LI 0.8 and above) is a small share of the
   randomised training roads, so the policy practises it less.
+
+## Snapshot sweep (smooth road, 20 roads per LI, run 5 snapshots)
+
+Command: `g1_sweep.py --axis LI --values 0.75 0.8 0.85 --methods run:<RUN>/snapshots/step_N ...`, 2026-11-06.
+
+| Snapshot | LI 0.75 | LI 0.8 | LI 0.85 |
+|---|---|---|---|
+| 1.5M steps | 0% | 0% | 0% |
+| 2.0M | 0% | 0% | 0% |
+| 2.5M | 0% (1.29 m) | 0% | 0% |
+| 3.0M (final) | **100%** (8.30 m) | 0% (0.18 m) | 0% |
+
+All failures are mostly slipping (80 to 100% of falls). LI 0.8 was never crossed by any snapshot, and LI 0.75 only at the
+end of training. The run looks under-trained for the wider training distribution (progress still jumping between 2.5M
+and 3.0M), not like a policy that learned LI 0.8 and then lost it. Whether more steps or a different depth range
+is needed is the next experiment.
