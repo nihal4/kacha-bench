@@ -108,3 +108,10 @@ Reading:
 - New weakness at LI 0.5 (40%): all 12 non-successes left the road after walking 8 m, which is steering drift on firm
   mud, not a fall. Run 3 got 100% at 0.5.
 - Peak monsoon (LI 1.00) fails as before.
+
+## Continued to 6M steps: rutted-road LI sweep (20 roads per LI)
+
+DCM and run 5 are both 0% at every LI from 0.5 to 1.0. Falls happen in the first 0 to 0.35 m (distance 0.03 to 0.36 m at
+LI 0.5 to 0.8) with 95 to 100% "slipped" even at LI 0.5, where the smooth road gives 100%. So the rutted road fails at the
+start regardless of mud strength: the cause is the rut geometry (feet on rut walls), not wetness. This matches the plan to
+build a geometry ladder (shallower and narrower ruts first) before testing mud on the rutted road.

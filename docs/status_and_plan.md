@@ -185,6 +185,12 @@ Each step has a "done when" line. Do one at a time and record the result here.
    `--dry_share` and `--depth_range` (per-road mud depth, including none), and
    `--snapshot_every` (policy copies in `RUN/snapshots/`, usable as `run:PATH`). Not yet
    implemented: evaluating at mixed wetness during training.
+1h. Open items and ideas (2026-11-06), not done yet:
+   - Depth sweep at LI 0.8 for run 5 and run 3 (`g1_sweep.py --axis depth --values 0.04 0.08 0.12 0.15 --fix LI=0.8`): tests whether run 5's loss of LI 0.8 comes from few training roads in the hard cell (LI >= 0.78 and depth >= 12 cm is about 3% of its training roads, a calculation, not a measurement).
+   - Arms for balance (idea from the user: people use their arms on slippery ground): the arms are held fixed by the DCM; making them policy outputs is a separate run after the speed-output run, so effects can be told apart.
+   - Rutted road: 0% at every LI including 0.5, falls within 0.4 m, so the failure is geometry at the start; build the geometry ladder (see results/stage1_dcm_ppo_run5_dr.md).
+   - LI 0.5 weakness of run 5 (40%, drifts off the road after 8 m) to re-check in the speed-output run.
+   - Rule for the time limit: one value for every method in a comparison, decided before looking at results, with crossing time reported.
 1g. Design change (2026-11-06, user's idea, supported by results/dcm_slow_walking_check.md): the policy chooses its walking speed (`--speed_action`) and the crossing time limit is raised (`--max_seconds 300`, same for every method). New run from scratch with run 5's other settings; arms for balance are a later, separate change. The old 60 s results stay as the earlier baseline.
 1f. (Run 5 at 6M: dry 50%, LI 0.6-0.75 100%, LI 0.8 0%, LI 0.5 40%; see results/stage1_dcm_ppo_run5_dr.md; next: retry with --depth_range 0.08 0.15 --dry_share 0.2.) Dry ground: run 3 fails the dry season (0%, DCM 65%). The baseline should also work
    there (it is the reference for normal conditions). Next run: domain-randomised training
