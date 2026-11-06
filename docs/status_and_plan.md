@@ -41,6 +41,9 @@ Supported by the data so far (smooth road, 20 test roads per point, one simulato
   matched comparison, but each has one seed. On the season tables (20 roads each, smooth road)
   run 3 gets 100% in early monsoon (DCM 100%, run 1 5%), 0% in dry (DCM 65%) and 0% in peak
   monsoon (every method sinks at LI 1.00); on the rutted road every method gets 0% in every season.
+- Run 4 (memory length 10, from LI 0.5, one seed): 100% at LI 0.5 to 0.75, 70% at 0.8, 0% at 0.9 and
+  1.0; dry 0%, early monsoon 100%. Not better than history 5 (run 3: 100% up to 0.8), so history 5
+  is kept. Longer memory does not fix the dry-season gap.
 
 Not supported, do not claim:
 
@@ -78,7 +81,9 @@ Run 3 finished (2026-11-06): `g1-road-peak_monsoon-dcm-smooth-wet0.5-h5-s0`, run
 curriculum starting at LI 0.5. Smooth-road sweep: 100% at LI 0.5, 0.6, 0.65, 0.7, 0.75, 0.8;
 0% at 0.9 and 1.0. See `results/stage1_dcm_ppo_run3_wet05.md`.
 
-Nothing is running now.
+Run 4 finished (2026-11-06): history 10 from LI 0.5, see `results/stage1_dcm_ppo_run4_h10.md`.
+
+Nothing was running when this was written.
 
 Not done: see the plan, section 6.
 
@@ -166,7 +171,7 @@ Each step has a "done when" line. Do one at a time and record the result here.
    (the 0.85 point was a 60 s timeout for run 2, so consider reporting distance and falls
    separately from success); then seeds 1 and 2 of the run 3 configuration.
 1e. Attribute the gain to memory: a matched no-memory run (`--history 1 --wet_start 0.5`, 3M
-   steps, same seeds). Optional: `--history 10`. Implemented 2026-11-06 (tested by a short
+   steps, same seeds). History 10 (run 4, one seed) was not better than 5 (100% to LI 0.75, 70% at 0.8, dry 0%); keep 5. Implemented 2026-11-06 (tested by a short
    smoke run, not yet by a full run): `--wet_max LI` (curriculum ceiling), `--dr` with
    `--dry_share` and `--depth_range` (per-road mud depth, including none), and
    `--snapshot_every` (policy copies in `RUN/snapshots/`, usable as `run:PATH`). Not yet
