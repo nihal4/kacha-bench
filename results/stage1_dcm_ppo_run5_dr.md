@@ -63,3 +63,24 @@ All failures are mostly slipping (80 to 100% of falls). LI 0.8 was never crossed
 end of training. The run looks under-trained for the wider training distribution (progress still jumping between 2.5M
 and 3.0M), not like a policy that learned LI 0.8 and then lost it. Whether more steps or a different depth range
 is needed is the next experiment.
+
+## Continued to 6M steps: season tables (smooth and rutted road, 20 episodes, road seeds 50000+k)
+
+Run continued from 3.0M to 6.0M steps (same settings; resumed once at about 5.35M after a restart that also changed the
+periodic eval, see `docs/training.md`). Final `model.zip` evaluated automatically; sweeps for this policy follow below
+once copied. Dry LI -0.2 with no mud layer; early monsoon LI 0.70, 8 cm; peak monsoon LI 1.00, 15 cm.
+
+| Road | Season | DCM | Run 5 at 6M | (Run 5 at 3M) |
+|---|---|---|---|---|
+| smooth | dry | 65% | 50% (6.35 m, slipped 8) | 50% |
+| smooth | early monsoon | 100% | 100% (41.3 s) | 100% |
+| smooth | peak monsoon (LI 1.00) | 0% | 0% (sank 18, slipped 2) | 0% |
+| rutted | dry | 0% | 0% | 0% |
+| rutted | early monsoon | 0% | 0% | 0% |
+| rutted | peak monsoon | 0% | 0% | 0% |
+
+- 3M more steps changed nothing in the season tables: dry stays at 50% (DCM 65%), peak (LI 1.00) at 0%.
+- Training-mix check (20 smooth roads drawn from the training distribution, LI 0.4 to 0.85, 25% dry, depth 4 to 15 cm;
+  `record.py --check 20`, no observation noise): 19 of 20 walked, all 7 dry roads walked; the one fall was at 3.9 kPa
+  (about LI 0.82 to 0.85). Not a result: one seed, drawn from the training distribution.
+- Fixed on 2026-11-06: progress videos and `record.py` filmed the rutted road (all 0%) instead of the run's road.
