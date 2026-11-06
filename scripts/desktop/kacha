@@ -32,6 +32,9 @@ case "${1:-help}" in
         case "$EXTRA" in *--dr\ *|*--dr) T="$T-dr" ;; esac
         M=$(echo "$EXTRA" | grep -oE -- '--wet_max [0-9.]+' | awk '{printf "%g", $2}')
         [ -n "$M" ] && T="$T-max$M"
+        case "$EXTRA" in *--speed_action*) T="$T-spd" ;; esac
+        TS=$(echo "$EXTRA" | grep -oE -- '--max_seconds [0-9.]+' | awk '{printf "%g", $2}')
+        [ -n "$TS" ] && T="$T-t$TS"
         case "$EXTRA" in *--scan*) T="$T-scan" ;; esac
         if [ -n "$(echo "$EXTRA" | grep -oE -- '--depth_range|--dry_share')" ]; then
             DR=$(echo "$EXTRA" | grep -oE -- '--depth_range [0-9.]+ [0-9.]+' | awk '{printf "%g-%g", $2, $3}'); DR=${DR:-0.04-0.15}

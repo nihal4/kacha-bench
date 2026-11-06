@@ -120,6 +120,9 @@ def _smooth(s):
     return s * s * (3 - 2 * s)
 
 
+V_STEP = 0.03                 # m/s: largest change of the planned speed per footstep
+
+
 class DCMWalker:
     def __init__(self, model, params=None, surface=None, surface_vec=None):
         self.m, self.p = model, params or DCMParams()
@@ -200,6 +203,7 @@ class DCMWalker:
         """Start a walk from double support. upper_pose: waist and arm targets (17)."""
         self.speed, self.upper_pose = speed, np.asarray(upper_pose, dtype=float)
         self.v_plan = speed           # planned speed, adapted when the robot falls behind
+        self.v_cmd = None             # set from outside to choose the speed (see V_STEP)
         mujoco.mj_forward(self.m, d)
         soles = [self.sole(d, k)[0] for k in range(2)]
         R = d.xmat[self.pelvis].reshape(3, 3)
@@ -324,9 +328,14 @@ class DCMWalker:
                 # speed adaptation: if the DCM lags its plan along the walking direction,
                 # plan the next steps slower, then relax back toward the command
                 lag = float(np.dot(xi - ref, self._fwd()))
-                self.v_plan = float(np.clip(self.v_plan + p.k_speed * lag
-                                            + p.relax_speed * (self.speed - self.v_plan),
-                                            0.3 * self.speed, self.speed))
+                if self.v_cmd is not None:
+                    # speed chosen from outside (a policy): taken up only here, at touchdown,
+                    # and by at most V_STEP per step, so the plan never jumps mid-swing
+                    self.v_plan = float(np.clip(self.v_cmd, self.v_plan - V_STEP, self.v_plan + V_STEP))
+                else:
+                    self.v_plan = float(np.clip(self.v_plan + p.k_speed * lag
+                                                + p.relax_speed * (self.speed - self.v_plan),
+                                                0.3 * self.speed, self.speed))
                 self.A, self.B = self.B, self.anchor(d, swing)
                 self.stance, self.phase, self.t = swing, "ds", 0.0
                 self.n_steps += 1

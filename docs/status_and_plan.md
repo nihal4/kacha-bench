@@ -185,6 +185,7 @@ Each step has a "done when" line. Do one at a time and record the result here.
    `--dry_share` and `--depth_range` (per-road mud depth, including none), and
    `--snapshot_every` (policy copies in `RUN/snapshots/`, usable as `run:PATH`). Not yet
    implemented: evaluating at mixed wetness during training.
+1g. Design change (2026-11-06, user's idea, supported by results/dcm_slow_walking_check.md): the policy chooses its walking speed (`--speed_action`) and the crossing time limit is raised (`--max_seconds 300`, same for every method). New run from scratch with run 5's other settings; arms for balance are a later, separate change. The old 60 s results stay as the earlier baseline.
 1f. (Run 5 at 6M: dry 50%, LI 0.6-0.75 100%, LI 0.8 0%, LI 0.5 40%; see results/stage1_dcm_ppo_run5_dr.md; next: retry with --depth_range 0.08 0.15 --dry_share 0.2.) Dry ground: run 3 fails the dry season (0%, DCM 65%). The baseline should also work
    there (it is the reference for normal conditions). Next run: domain-randomised training
    `--wet_start 0.4 --wet_max 0.85 --dr --history 5` (3M steps), then the season tables

@@ -146,3 +146,17 @@ kacha job peak_monsoon 3000000 "--robot g1 --base dcm --road smooth --wet_start 
 - Progress videos (`scripts/record.py`) are now cheap: no shadows, reflections, sky or plants,
   360x640, 12 fps, filmed at the training wetness range. A video takes about 35 s. The watcher writes
   `runs/<run>/progress/step_<N>k.log` with the recorder's output, so a failure can be diagnosed.
+
+## Policy-chosen walking speed and time limit (added 2026-11-06)
+
+- `--speed_action` (needs `--base dcm`): the policy gets a 13th output that sets the DCM's walking speed between
+  0.05 and 0.20 m/s (starts at 0.15). The speed is taken up only at foot touchdown and changes by at most 0.03 m/s per
+  step (`kacha/dcm.py`, `V_STEP`), so the footstep plan never jumps mid-swing. The observation already contains the
+  speed (now the planned speed). Checked on early-monsoon smooth road: constant 0.15 crosses, constant 0.20 is the
+  controller's reliable speed, 0.25 falls (so the range stops at 0.20), 0.05 drifts off the road after about 130 s, and
+  speeding up or slowing down mid-walk did not cause falls on its own. Changes the action size: always a new run.
+- `--max_seconds S`: time allowed to cross the road, in training and in the automatic evaluation (which passes it to
+  `g1_evaluate.py` and `g1_sweep.py` through the `KACHA_MAX_SECONDS` environment variable). The limit must be the same
+  for every method in a comparison. Reason: at LI 0.8 the DCM crosses at 0.1 m/s but needs about 200 s
+  (`results/dcm_slow_walking_check.md`).
+- Run names get `-spd` and `-t<S>` tags (`kacha job ... "--speed_action --max_seconds 300"`).

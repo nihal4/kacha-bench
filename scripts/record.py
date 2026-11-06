@@ -38,7 +38,7 @@ def record(run, out, best=False, seeds=TEST_SEEDS, check=0, noise=False):
                 kw["mud"].update(depth_lo=cfg["g1_dr_depth_range"][0],
                                  depth_hi=cfg["g1_dr_depth_range"][1], p_dry=cfg["g1_dr_dry_share"])
         def mk():
-            e = G1MudRoadEnv(seed=0, look=False, obs_noise=noise, max_seconds=60.0, **kw)
+            e = G1MudRoadEnv(seed=0, look=False, obs_noise=noise, max_seconds=cfg.get("g1_max_seconds") or 60.0, **kw)
             e.render_size, e.cheap_render = (360, 640), True    # low graphics: fast
             return e
     else:

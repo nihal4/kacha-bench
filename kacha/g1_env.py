@@ -43,6 +43,7 @@ UNITREE_DEFAULT = np.array([-0.1, 0.0, 0.0, 0.3, -0.2, 0.0] * 2)
 UNITREE_SCALE = 0.25
 N_PROPRIO = 50
 N_PROPRIO_DCM = 52           # + the DCM tracking error (2) for base="dcm"
+SPEED_MIN, SPEED_MAX, SPEED_START = 0.05, 0.20, 0.15   # m/s, range the policy picks from (--speed_action)
 DCM_SPEED = 0.2              # m/s, the speed the DCM controller walks reliably
 DCM_SCALE = 0.5 * np.array([0.25, 0.15, 0.10, 0.25, 0.20, 0.10] * 2)   # rad, corrections
 # Failure-cause thresholds (heuristics; docs/study.md, "Failure causes"), judged over the
@@ -70,7 +71,7 @@ class G1MudRoadEnv(gym.Env):
                  max_seconds=40.0, regen_every=20, timestep=0.005, control_dt=0.02,
                  obs_noise=True, look=False, spawn_x=-4.0, goal_x=4.3, road=None,
                  assist=0.0, reference=True, height_scan=False, history=1,
-                 mud=None, base="scripted", render_mode=None):
+                 mud=None, base="scripted", speed_action=False, render_mode=None):
         # mud: overrides for robustness sweeps, applied on top of the season:
         #   LI (sets strength and suction together), su_kpa, depth (m), beta (suction
         #   ratio), mu (surface friction), fill (share of each hole filled with water);
@@ -81,6 +82,7 @@ class G1MudRoadEnv(gym.Env):
         if base not in ("scripted", "dcm"):
             raise ValueError(f"base must be 'scripted' or 'dcm', got {base!r}")
         self.base = base
+        self.speed_action = bool(speed_action) and base == "dcm"   # 13th action: walking speed
         self.dcm = None
         self.assist = float(assist)
         self.reference, self.height_scan = bool(reference), bool(height_scan)
@@ -99,7 +101,7 @@ class G1MudRoadEnv(gym.Env):
         n_p = N_PROPRIO_DCM if self.base == "dcm" else N_PROPRIO
         n_obs = n_p * self.history + (len(SCAN_X) * len(SCAN_Y) if self.height_scan else 0)
         self.observation_space = gym.spaces.Box(-np.inf, np.inf, (n_obs,), np.float32)
-        self.action_space = gym.spaces.Box(-1.0, 1.0, (12,), np.float32)
+        self.action_space = gym.spaces.Box(-1.0, 1.0, (13 if self.speed_action else 12,), np.float32)
 
     # ------------------------------------------------------------------ world
     def _pick_season(self):
@@ -206,7 +208,9 @@ class G1MudRoadEnv(gym.Env):
             from .dcm import DCMWalker
             self.dcm = DCMWalker(m, surface=self.surface, surface_vec=self.surface_vec)
             self.dcm.settle(d, u0[12:])
-            self.dcm.reset(d, DCM_SPEED, u0[12:])
+            self.dcm.reset(d, SPEED_MAX if self.speed_action else DCM_SPEED, u0[12:])
+            if self.speed_action:
+                self.dcm.v_plan = self.dcm.v_cmd = SPEED_START
             self.cmd = DCM_SPEED
         self.t, self.steps = 0.0, 0
         self.last_action = np.zeros(12)
@@ -248,7 +252,7 @@ class G1MudRoadEnv(gym.Env):
             frac, self.speed = 0.0, 0.0
         else:
             frac = (w.t / T) if w.phase == "ss" else ((w.p.t_ss + w.t) / T)
-            self.speed = w.speed
+            self.speed = w.v_plan if self.speed_action else w.speed
         self.phase = ((w.n_steps + min(frac, 1.0)) / 2.0) % 1.0
         self.u_ref = np.r_[w.q_des[:12], w.upper_pose]
         if w.phase == "ss":
@@ -271,6 +275,9 @@ class G1MudRoadEnv(gym.Env):
         ctrl_fn(data, dt) -> actuator targets; it replaces the action (model-based
         baselines such as kacha.dcm run at the physics rate)."""
         a = np.clip(np.asarray(action, dtype=np.float64), -1.0, 1.0)
+        if self.speed_action and self.dcm is not None and len(a) > 12:
+            self.dcm.v_cmd = SPEED_MIN + 0.5 * (a[12] + 1.0) * (SPEED_MAX - SPEED_MIN)
+        a = a[:12]
         m, d = self.model, self.data
         u = self.u_ref.copy()
         u[:12] += (ACTION_SCALE if self.reference else UNITREE_SCALE) * a
@@ -592,4 +599,4 @@ def env_kwargs_from_config(cfg):
     return dict(season="dry" if season == "none" else season,
                 reference=cfg.get("g1_reference", True),
                 height_scan=cfg.get("scan", False), history=cfg.get("g1_history", 1),
-                base=cfg.get("g1_base", "scripted"))
+                base=cfg.get("g1_base", "scripted"), speed_action=cfg.get("g1_speed_action", False))
