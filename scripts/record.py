@@ -27,6 +27,8 @@ def record(run, out, best=False, seeds=TEST_SEEDS, check=0, noise=False):
     if g1:
         from kacha.g1_env import G1MudRoadEnv, env_kwargs_from_config
         kw = env_kwargs_from_config(cfg)
+        from kacha.terrain import ROADS            # the road the run trained on (smooth/rutted)
+        kw["road"] = ROADS[cfg.get("g1_road") or "rutted"]
         ws = cfg.get("g1_wet_start")
         if ws is not None:                       # film at the wetness range being trained
             from kacha.mud import SEASONS
