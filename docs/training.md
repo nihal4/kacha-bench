@@ -163,3 +163,7 @@ kacha job peak_monsoon 3000000 "--robot g1 --base dcm --road smooth --wet_start 
 - Progress videos are lit (soft light from the camera, no shadows, sky background) and carry a text overlay: run name,
   steps trained, clip and road seed, the road's mud (wetness LI, strength, depth, or "dry ground"), live time, distance
   and walking speed, and at the end of each clip FELL / LEFT THE ROAD / OUT OF TIME / REACHED THE END.
+- Videos from runs trained with a wetness curriculum film four fixed conditions, the same in every video so checkpoints can
+  be compared: dry ground, firm mud LI 0.60, LI 0.75 and the hard case LI 0.82 (15 cm mud). Outcomes are whatever they
+  are (no balancing of successes and failures). With a long `--max_seconds` frames are sampled more sparsely, and a video
+  of a slow walker can take 10 minutes or more at low priority.

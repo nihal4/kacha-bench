@@ -14,6 +14,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("MUJOCO_GL", "egl")
 
 TEST_SEEDS = (7, 8, 9)
+# G1 videos: four fixed, informative conditions (the same in every video, so checkpoints can be compared);
+# smooth-road training runs only. Mud depth 15 cm = the peak-monsoon layer used in the LI sweeps.
+G1_CLIPS = (("dry ground", dict(depth=0.0)),
+            ("firm mud, LI 0.60", dict(LI=0.60, depth=0.15)),
+            ("edge of proven band, LI 0.75", dict(LI=0.75, depth=0.15)),
+            ("hard case, LI 0.82", dict(LI=0.82, depth=0.15)))
 
 
 def _font(size):
@@ -75,8 +81,9 @@ def record(run, out, best=False, seeds=TEST_SEEDS, check=0, noise=False):
             if cfg.get("g1_dr"):
                 kw["mud"].update(depth_lo=cfg["g1_dr_depth_range"][0],
                                  depth_hi=cfg["g1_dr_depth_range"][1], p_dry=cfg["g1_dr_dry_share"])
-        def mk():
-            e = G1MudRoadEnv(seed=0, look=False, obs_noise=noise, max_seconds=cfg.get("g1_max_seconds") or 60.0, **kw)
+        def mk(mud=None):
+            k = dict(kw, mud=mud) if mud is not None else kw
+            e = G1MudRoadEnv(seed=0, look=False, obs_noise=noise, max_seconds=cfg.get("g1_max_seconds") or 60.0, **k)
             e.render_size, e.cheap_render = (360, 640), True    # low graphics: fast
             return e
     else:
@@ -104,24 +111,29 @@ def record(run, out, best=False, seeds=TEST_SEEDS, check=0, noise=False):
     tmp = out[:-4] + ".part.mp4"
     writer = imageio.get_writer(tmp, fps=12, macro_block_size=8)
     results = []
+    clips = G1_CLIPS if (g1 and cfg.get("g1_wet_start") is not None) else None
+    if clips:
+        seeds = (7, 8, 9, 10)[:len(clips)]
+    stride = 4 * max(1, round((cfg.get("g1_max_seconds") or 60.0) / 60.0))   # long limits: sample frames more sparsely
     run_name = os.path.basename(os.path.normpath(run)).replace("g1-road-", "")
     steps_k = f"{model.num_timesteps / 1000:,.0f}k steps"
     for ci, seed in enumerate(seeds, 1):
-        env = mk()
+        label = clips[ci - 1][0] if clips else ""
+        env = mk(clips[ci - 1][1]) if clips else mk()
         obs, _ = env.reset(seed=seed)
         info, frame, done = {}, None, False
         for t in range(G1_MAX_STEPS if g1 else MAX_STEPS):
             a, _ = model.predict(norm.normalize_obs(obs[None]), deterministic=True)
             obs, _, te, tr, info = env.step(a[0])
             done = te or tr
-            if t % 4 == 0 or done:
+            if t % stride == 0 or done:
                 frame = raw = env.render()
                 if g1:
                     ms = env.mud_summary()
                     cond = ("dry ground, no mud" if ms["su_kpa"] is None else
                             f"mud: wetness LI {_li(ms['su_kpa']):.2f} | strength {ms['su_kpa']:.1f} kPa | depth {ms['depth'] * 100:.0f} cm")
                     frame = overlay(frame, [f"{run_name}  |  {steps_k}",
-                                            f"clip {ci}/{len(seeds)}  road seed {seed}  ({cfg.get('season', '')} setting)",
+                                            f"clip {ci}/{len(seeds)}: {label}  (road seed {seed})" if label else f"clip {ci}/{len(seeds)}  road seed {seed}",
                                             cond,
                                             f"time {env.t:5.1f} s | distance {info.get('distance', 0.0):+.2f} m of 8.3 | speed {env.speed:.2f} m/s"])
                 writer.append_data(frame)
@@ -135,7 +147,7 @@ def record(run, out, best=False, seeds=TEST_SEEDS, check=0, noise=False):
         if g1:
             why = "REACHED THE END" if ok else ("FELL" if info.get("fell") else
                   "LEFT THE ROAD" if info.get("off_road") else "OUT OF TIME")
-            frame = overlay(raw, [f"{run_name}  |  {steps_k}", f"clip {ci}/{len(seeds)}  road seed {seed}", cond,
+            frame = overlay(raw, [f"{run_name}  |  {steps_k}", f"clip {ci}/{len(seeds)}: {label}  (road seed {seed})" if label else f"clip {ci}/{len(seeds)}  road seed {seed}", cond,
                                     f"distance {info.get('distance', 0.0):+.2f} m | time {env.t:.1f} s"],
                             big=(why, (60, 200, 80) if ok else (230, 70, 60)))
         mark = frame.copy()
