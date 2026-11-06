@@ -1,0 +1,49 @@
+# Stage 1, run 5: PPO on DCM with domain randomisation (`--wet_start 0.4 --wet_max 0.85 --dr --history 5`)
+
+Training roads get a random mud depth (4 to 15 cm) or no mud layer (25% dry roads), and the wetness curriculum
+runs from LI 0.4 to a ceiling of 0.85. Results copied from the training PC on 2026-11-06. Interpretation is in
+[`docs/status_and_plan.md`](../docs/status_and_plan.md).
+
+| Item | Value |
+|---|---|
+| Run folder | `g1-road-peak_monsoon-dcm-smooth-wet0.4-h5-s0` (the folder name lacks the `-dr` and `-max0.85` tags: the `kacha` script built the name itself; fixed in commit 9cc8383; `config.json` has `g1_dr: true`, `g1_wet_max: 0.85`, `g1_dr_dry_share: 0.25`, depth range 0.04 to 0.15) |
+| Job | `kacha job peak_monsoon 3000000 "--robot g1 --base dcm --road smooth --wet_start 0.4 --wet_max 0.85 --dr --history 5 --then-evaluate"` |
+| Snapshots | `snapshots/step_000500000` to `step_003000000` (every 500k steps) |
+| Seed | 0 (one seed) |
+| Evaluation | final `model.zip`, 20 episodes per condition, no assist, no observation noise |
+
+## Season tables (20 roads per season, road seeds 50000+k)
+
+| Road | Season | Success | Fell | Distance (m) | Time (s) | Causes |
+|---|---|---|---|---|---|---|
+| smooth | dry | **50%** | 50% | 4.96 | 27.1 | slipped 6, no_trigger 4 |
+| smooth | early_monsoon | 100% | 0% | 8.30 | 42.8 | - |
+| smooth | peak_monsoon | 0% | 100% | -0.16 | 1.9 | sank 17, stuck 2, slipped 1 |
+| rutted | dry | 0% | 100% | 0.02 | 2.9 | slipped 19, no_trigger 1 |
+| rutted | early_monsoon | 0% | 100% | 0.05 | 3.1 | slipped 20 |
+| rutted | peak_monsoon | 0% | 100% | -0.21 | 1.8 | sank 14, slipped 6 |
+
+For reference, smooth road: DCM dry 65%, early monsoon 100% (45.4 s), peak monsoon 0%; run 3 (no domain randomisation) dry 0%.
+
+## Soil-wetness sweep, smooth road (20 roads per LI)
+
+| LI | DCM | Run 3 (no DR, from 0.5) | Run 5 (DR, from 0.4, cap 0.85) |
+|---|---|---|---|
+| 0.5 | 100% | 100% | 100% |
+| 0.6 | 100% | 100% | 100% |
+| 0.65 | 100% | 100% | 100% |
+| 0.7 | 100% | 100% | 100% |
+| 0.75 | 0% | 100% | 100% |
+| 0.8 | 0% | **100%** | **0%** (distance 0.28 m, slipped 90%, sank 10%) |
+| 0.9 | 0% | 0% | 0% (slipped 100%) |
+| 1.0 | 0% | 0% | 0% (sank 70%, stuck 25%) |
+
+Cost of transport of run 5 where it succeeds: 0.91, 0.99, 1.05, 1.09, 1.22 at LI 0.5, 0.6, 0.65, 0.7, 0.75 (DCM 0.88, 1.02, 1.06, 1.12 at 0.5 to 0.7).
+LI 0.85 was not in this sweep. Rutted-road LI sweep not copied yet (expected 0% everywhere).
+
+## Reading
+
+- Domain randomisation recovered the dry season (0% to 50%; DCM 65%, intervals overlap) and kept early monsoon at 100%.
+- It lost LI 0.8 (100% to 0%) on the 15 cm mud of the sweep. The runs differ in three ways (domain randomisation, start LI 0.4 against 0.5, ceiling 0.85 against 1.00) and each has one seed,
+  so the cause is not isolated. **Hypothesis:** the hardest condition (deep mud at LI 0.8 and above) is a small share of the
+  randomised training roads, so the policy practises it less.

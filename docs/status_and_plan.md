@@ -44,6 +44,10 @@ Supported by the data so far (smooth road, 20 test roads per point, one simulato
 - Run 4 (memory length 10, from LI 0.5, one seed): 100% at LI 0.5 to 0.75, 70% at 0.8, 0% at 0.9 and
   1.0; dry 0%, early monsoon 100%. Not better than history 5 (run 3: 100% up to 0.8), so history 5
   is kept. Longer memory does not fix the dry-season gap.
+- Run 5 (domain randomisation: random mud depth with 25% dry roads, curriculum from LI 0.4 to 0.85,
+  history 5, one seed): dry 50% (DCM 65%, run 3 0%), early monsoon 100%; LI sweep 100% at 0.5 to 0.75
+  but **0% at 0.8** (run 3 had 100%). So the dry gap is closed at the cost of the wettest range; the
+  cause is not isolated (three differences from run 3, one seed).
 
 Not supported, do not claim:
 
@@ -82,6 +86,9 @@ curriculum starting at LI 0.5. Smooth-road sweep: 100% at LI 0.5, 0.6, 0.65, 0.7
 0% at 0.9 and 1.0. See `results/stage1_dcm_ppo_run3_wet05.md`.
 
 Run 4 finished (2026-11-06): history 10 from LI 0.5, see `results/stage1_dcm_ppo_run4_h10.md`.
+
+Run 5 finished (2026-11-06): domain-randomised run, see `results/stage1_dcm_ppo_run5_dr.md` (folder
+`g1-road-peak_monsoon-dcm-smooth-wet0.4-h5-s0`).
 
 Nothing was running when this was written.
 
@@ -185,6 +192,10 @@ Each step has a "done when" line. Do one at a time and record the result here.
    falls below body weight at about LI 0.86, so LI 1.00 (peak monsoon as defined) is probably
    a physical limit for this foot; decide whether to redefine peak monsoon (for example
    LI 0.85) or report LI 1.00 as that limit.
+   Run 5 result: dry 50% and LI 0.5-0.75 at 100%, but LI 0.8 lost. Next: sweep the snapshots
+   (`RUN/snapshots/`) at LI 0.75, 0.8, 0.85 to see whether 0.8 was lost late in training, then a
+   run with depths concentrated on the season depths (`--depth_range 0.08 0.15`, `--dry_share 0.2`)
+   and more steps (5M).
 2. Freeze the scope in one paragraph (smooth road and soil wetness as the main study; rutted
    road as future work unless step 6 gives a baseline).
 3. Assumption register: complete the table in section 8 with source and effect for every
