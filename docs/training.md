@@ -165,5 +165,5 @@ kacha job peak_monsoon 3000000 "--robot g1 --base dcm --road smooth --wet_start 
   and walking speed, and at the end of each clip FELL / LEFT THE ROAD / OUT OF TIME / REACHED THE END.
 - Videos from runs trained with a wetness curriculum film four fixed conditions, the same in every video so checkpoints can
   be compared: dry ground, firm mud LI 0.60, LI 0.75 and the hard case LI 0.82 (15 cm mud). Outcomes are whatever they
-  are (no balancing of successes and failures). With a long `--max_seconds` frames are sampled more sparsely, and a video
-  of a slow walker can take 10 minutes or more at low priority.
+  are (no balancing of successes and failures). Videos play in real time (12.5 fps, one frame per 0.08 s of simulation). A clip is cut after 120 s of
+  simulated time and then says STILL WALKING, so a slow walker's video is up to 4 x 2 minutes long and takes some minutes to render at low priority.

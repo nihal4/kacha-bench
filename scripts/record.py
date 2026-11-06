@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("MUJOCO_GL", "egl")
 
 TEST_SEEDS = (7, 8, 9)
+VIDEO_MAX_S = 120.0      # a clip is cut after this much simulated time (videos play in real time)
 # G1 videos: four fixed, informative conditions (the same in every video, so checkpoints can be compared);
 # smooth-road training runs only. Mud depth 15 cm = the peak-monsoon layer used in the LI sweeps.
 G1_CLIPS = (("dry ground", dict(depth=0.0)),
@@ -109,12 +110,13 @@ def record(run, out, best=False, seeds=TEST_SEEDS, check=0, noise=False):
         print(f"check: {sum(res)}/{len(res)} walked (noise={'on' if noise else 'off'})")
         return
     tmp = out[:-4] + ".part.mp4"
-    writer = imageio.get_writer(tmp, fps=12, macro_block_size=8)
+    writer = imageio.get_writer(tmp, fps=12.5, macro_block_size=8)
     results = []
     clips = G1_CLIPS if (g1 and cfg.get("g1_wet_start") is not None) else None
     if clips:
         seeds = (7, 8, 9, 10)[:len(clips)]
-    stride = 4 * max(1, round((cfg.get("g1_max_seconds") or 60.0) / 60.0))   # long limits: sample frames more sparsely
+    stride = 4                                    # every 4th control step = 0.08 s: plays in real time at 12.5 fps
+    video_steps = int(min(cfg.get("g1_max_seconds") or 60.0, VIDEO_MAX_S) / 0.02)
     run_name = os.path.basename(os.path.normpath(run)).replace("g1-road-", "")
     steps_k = f"{model.num_timesteps / 1000:,.0f}k steps"
     for ci, seed in enumerate(seeds, 1):
@@ -122,7 +124,7 @@ def record(run, out, best=False, seeds=TEST_SEEDS, check=0, noise=False):
         env = mk(clips[ci - 1][1]) if clips else mk()
         obs, _ = env.reset(seed=seed)
         info, frame, done = {}, None, False
-        for t in range(G1_MAX_STEPS if g1 else MAX_STEPS):
+        for t in range(video_steps if g1 else MAX_STEPS):
             a, _ = model.predict(norm.normalize_obs(obs[None]), deterministic=True)
             obs, _, te, tr, info = env.step(a[0])
             done = te or tr
@@ -146,7 +148,8 @@ def record(run, out, best=False, seeds=TEST_SEEDS, check=0, noise=False):
         results.append(ok)
         if g1:
             why = "REACHED THE END" if ok else ("FELL" if info.get("fell") else
-                  "LEFT THE ROAD" if info.get("off_road") else "OUT OF TIME")
+                  "LEFT THE ROAD" if info.get("off_road") else
+                  "STILL WALKING" if not done else "OUT OF TIME")
             frame = overlay(raw, [f"{run_name}  |  {steps_k}", f"clip {ci}/{len(seeds)}: {label}  (road seed {seed})" if label else f"clip {ci}/{len(seeds)}  road seed {seed}", cond,
                                     f"distance {info.get('distance', 0.0):+.2f} m | time {env.t:.1f} s"],
                             big=(why, (60, 200, 80) if ok else (230, 70, 60)))
