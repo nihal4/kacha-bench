@@ -181,3 +181,21 @@ Reading (model behaviour):
   proportional to su with no time or rate dependence, a single peak value (beta_max 0.6, assumed), no slurry-over-firm-base layering.
 - Water-filled holes with hidden depth exist in the model (`water.py`) but the smooth road used for the baseline has none,
   and the rutted road fails at the start for geometry reasons, so holes have not been tested yet.
+
+## 9. Dry-ground contact fix and friction cap (2026-11-07)
+
+Two corrections to the G1 flat-foot model, found while diagnosing why run 6 (0% dry, 100% on every firm mud) failed on dry ground.
+
+1. **Dry ground now rests on a plate, like every mud road.** Before, dry ground (no mud layer) had the soles touching the bare
+   height-field mesh. MuJoCo's height-field collision gave a standing foot 5 to 6 contacts instead of the 4 of its four sole spheres
+   (duplicate contacts where a sphere straddles a grid seam), so the contact stiffness changed as a foot crossed the 4 cm grid.
+   Policies trained on plates (all mud roads) failed on it (run 6: 0% bare floor, 100% on LI -0.2 to 0.3 plates), plain DCM less
+   (85% against 100%). Now a dry road is built as a never-yielding plate layer (`RIGID_DEPTH` 4 cm, strength of LI -0.2, no suction,
+   no sinkage): still flat rigid ground with friction 1.0, on the same contact path as the rest. `KACHA_BARE_DRY=1` restores the
+   bare floor, to be reported as a robustness check. Plain DCM on the new dry: 100% on 20 roads (bare floor 85%).
+2. **Plate friction cap 2.0 became 1.0** (`MU_MAX` in `kacha/mud.py`, `KACHA_MU_MAX`). With the cap at 2.0, ground firmer than LI 0.4
+   gave friction up to 2.0 and plain DCM fell immediately on all of it (`results/firm_side_friction_cap.md`). Rubber on firm soil
+   is below about 1 (assumption). Affects only LI < about 0.5, where the lateral grip exceeds 1; run 6 at LI 0.4 to 0.6 is unchanged.
+
+Consequences: dry-season results from before this date (runs 1 to 6, season tables) used the bare floor. They are valid
+for that contact and not comparable to new dry numbers. Runs 1 to 6 should be re-scored on the new dry ground (evaluation only).

@@ -24,6 +24,7 @@ actions and not wasting energy. Standing still earns only the small alive term.
 
 import gymnasium as gym
 import mujoco
+import os
 import numpy as np
 
 from .g1_scene import build_g1_scene, foot_geoms
@@ -44,6 +45,12 @@ UNITREE_SCALE = 0.25
 N_PROPRIO = 50
 N_PROPRIO_DCM = 52           # + the DCM tracking error (2) for base="dcm"
 SPEED_MIN, SPEED_MAX, SPEED_START = 0.05, 0.20, 0.15   # m/s, range the policy picks from (--speed_action)
+# Dry ground rests on the same contact path as every mud road: a flat sole-sized support plate that never yields, with no
+# suction (LI -0.2). The bare height-field floor gives a foot 5 to 6 contacts instead of 4 (MuJoCo adds duplicate contacts where
+# a sphere straddles a grid seam, so the contact stiffness changes as the foot crosses the 4 cm grid), and policies trained on
+# plates failed on it. KACHA_BARE_DRY=1 restores the old bare floor (kept as a robustness check). See docs/mud_physics.md, section 9.
+BARE_DRY = os.environ.get("KACHA_BARE_DRY", "0") == "1"
+RIGID_DEPTH = 0.04      # m of (never-yielding) layer under the plates for dry ground
 DCM_SPEED = 0.2              # m/s, the speed the DCM controller walks reliably
 DCM_SCALE = 0.5 * np.array([0.25, 0.15, 0.10, 0.25, 0.20, 0.10] * 2)   # rad, corrections
 # Failure-cause thresholds (heuristics; docs/study.md, "Failure causes"), judged over the
@@ -158,7 +165,11 @@ class G1MudRoadEnv(gym.Env):
         else:
             depth = o.get("depth", base["depth"])
         if depth <= 0:
-            return None, 0.0
+            if BARE_DRY:
+                return None, 0.0
+            p = MudParams(su=shear_strength(-0.2), depth=RIGID_DEPTH, beta=0.0)
+            p.rigid = True
+            return p, 0.0
         su = o["su_kpa"] * 1e3 if "su_kpa" in o else shear_strength(LI)
         p = MudParams(su=su, depth=depth, beta=o.get("beta", breakout_ratio(LI)))
         if "mu" in o:
@@ -169,7 +180,7 @@ class G1MudRoadEnv(gym.Env):
     def mud_summary(self):
         """The physical conditions of the current road, for logging."""
         p = self.mud_p
-        return dict(season=self.cur_season, su_kpa=p.su / 1e3 if p else None,
+        return dict(season=self.cur_season, su_kpa=p.su / 1e3 if p and not getattr(p, "rigid", False) else None,
                     depth=p.depth if p else 0.0, beta=p.beta if p else 0.0,
                     mu=p.mu_surface if p else None, fill=self.water_fill_share())
 
