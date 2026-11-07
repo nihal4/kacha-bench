@@ -48,7 +48,7 @@ def start_video(run, step_k, py):
     proc = subprocess.Popen([py, os.path.join(REPO, "scripts", "record.py"), "--run", run, "--out", out],
                             cwd=REPO, stdout=log, stderr=subprocess.STDOUT,
                             env=dict(os.environ, MUJOCO_GL=os.environ.get("MUJOCO_GL", "egl")),
-                            preexec_fn=lambda: os.nice(10))
+                            preexec_fn=lambda: os.nice(5))
     return proc, out, time.time()
 
 
@@ -290,7 +290,7 @@ def main():
         runs = find_runs(args.root)
         if pending is not None:
             proc, out, t0, run, mark = pending
-            if proc.poll() is None and time.time() - t0 > 3600:
+            if proc.poll() is None and time.time() - t0 > 7200:
                 proc.kill()
             if proc.poll() is not None:
                 state = json.load(open(state_f)) if os.path.exists(state_f) else {}

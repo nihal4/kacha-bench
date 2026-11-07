@@ -8,13 +8,14 @@ road), red = fell, left the road or stood still.
 import argparse
 import json
 import os
+import time
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault("MUJOCO_GL", "egl")
 
 TEST_SEEDS = (7, 8, 9)
-VIDEO_MAX_S = 120.0      # a clip is cut after this much simulated time (videos play in real time)
+VIDEO_MAX_S = 75.0       # a clip is cut after this much simulated time (videos play in real time)
 # G1 videos: four fixed, informative conditions (the same in every video, so checkpoints can be compared);
 # smooth-road training runs only. Mud depth 15 cm = the peak-monsoon layer used in the LI sweeps.
 G1_CLIPS = (("dry ground", dict(depth=0.0)),
@@ -110,13 +111,14 @@ def record(run, out, best=False, seeds=TEST_SEEDS, check=0, noise=False):
         print(f"check: {sum(res)}/{len(res)} walked (noise={'on' if noise else 'off'})")
         return
     tmp = out[:-4] + ".part.mp4"
-    writer = imageio.get_writer(tmp, fps=12.5, macro_block_size=8)
+    writer = imageio.get_writer(tmp, fps=25/3, macro_block_size=8)
     results = []
     clips = G1_CLIPS if (g1 and cfg.get("g1_wet_start") is not None) else None
     if clips:
         seeds = (7, 8, 9, 10)[:len(clips)]
-    stride = 4                                    # every 4th control step = 0.08 s: plays in real time at 12.5 fps
+    stride = 6                                    # every 6th control step = 0.12 s: plays in real time at 25/3 fps (fewer frames, cheaper)
     video_steps = int(min(cfg.get("g1_max_seconds") or 60.0, VIDEO_MAX_S) / 0.02)
+    t_start = time.time()
     run_name = os.path.basename(os.path.normpath(run)).replace("g1-road-", "")
     steps_k = f"{model.num_timesteps / 1000:,.0f}k steps"
     for ci, seed in enumerate(seeds, 1):
@@ -153,6 +155,7 @@ def record(run, out, best=False, seeds=TEST_SEEDS, check=0, noise=False):
             frame = overlay(raw, [f"{run_name}  |  {steps_k}", f"clip {ci}/{len(seeds)}: {label}  (road seed {seed})" if label else f"clip {ci}/{len(seeds)}  road seed {seed}", cond,
                                     f"distance {info.get('distance', 0.0):+.2f} m | time {env.t:.1f} s"],
                             big=(why, (60, 200, 80) if ok else (230, 70, 60)))
+        print(f"[record] clip {ci}/{len(seeds)} done after {time.time() - t_start:.0f} s: {'walked' if ok else 'did not reach the end'}", flush=True)
         mark = frame.copy()
         mark[:10] = mark[-10:] = mark[:, :10] = mark[:, -10:] = (40, 180, 60) if ok else (200, 50, 50)
         for _ in range(20):
