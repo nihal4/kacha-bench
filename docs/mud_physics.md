@@ -195,7 +195,7 @@ Two corrections to the G1 flat-foot model, found while diagnosing why run 6 (0% 
    bare floor, to be reported as a robustness check. Plain DCM on the new dry: 100% on 20 roads (bare floor 85%).
 2. **Plate friction cap 2.0 became 1.0** (`MU_MAX` in `kacha/mud.py`, `KACHA_MU_MAX`). With the cap at 2.0, ground firmer than LI 0.4
    gave friction up to 2.0 and plain DCM fell immediately on all of it (`results/firm_side_friction_cap.md`). Rubber on firm soil
-   is below about 1 (assumption). Affects only LI < about 0.5, where the lateral grip exceeds 1; run 6 at LI 0.4 to 0.6 is unchanged.
+   is below about 1 (assumption). Mainly affects LI < about 0.5, where the lateral grip exceeds 1; run 6 at LI 0.4 to 0.6 is unchanged. It is not strictly limited to those: transient friction demand at touchdown can exceed 1 on wetter mud, and early-monsoon times shifted slightly (plain DCM 45.4 to 45.0 s; run 6 one slip in 20 roads, 95% instead of 100%); to be checked with `KACHA_MU_MAX=2.0` (`results/stage1_dcm_ppo_run6_newdry.md`).
 
 Consequences: dry-season results from before this date (runs 1 to 6, season tables) used the bare floor. They are valid
 for that contact and not comparable to new dry numbers. Runs 1 to 6 should be re-scored on the new dry ground (evaluation only).
