@@ -37,3 +37,22 @@ LI >= 0.4 for this policy.
 Open for dry ground: the model's "dry" path has no mud plates at all (rigid floor, default contact), while every mud road has
 plates (soft, damped contact). Run 6 crosses plate-covered ground from LI 0.4 up but fails on the bare floor. Next test: run 6 on very firm
 mud with plates (LI -0.2 to 0.3, cap 1.0), which has grip like dry ground but the plate contact.
+
+## Dry ground: bare floor against firm plates (2026-11-07)
+
+Run 6 on very firm mud with plates (PC, `KACHA_MU_MAX=1.0`, 10 roads per LI, smooth road, 300 s): **100% at LI -0.2, 0.0, 0.2
+and 0.3** (8.30 m, cost of transport 0.88, no falls). On the bare dry floor (no plates) the same policy gets 0% (20 roads) and falls
+in the first seconds (g1_trace: 0% on 10 roads). Grip is about 1.0 in both.
+
+Plain DCM, same 20 roads (seeds 70000+k, smooth road, 300 s, scratch environment):
+
+| Ground | DCM success (95% CI) | Distance (m) |
+|---|---|---|
+| bare floor, no plates (`--axis depth --values 0.0`) | 85% (64-95) | 7.55 |
+| firm plates, LI -0.2, cap 1.0 | 100% (84-100) | 8.30 |
+
+Reading: the only difference between the two grounds is the contact the foot meets (the road's height-field mesh against a flat
+sole-sized plate); the policy is extremely sensitive to it (0% against 100%), plain DCM only mildly (85% against 100%, intervals
+overlap). The road is perfectly flat (roughness 0), so bumps are not the cause. Not known: which of the two contacts is closer to a
+real dry compacted road; both are simulator representations. The policy trained on 25% bare-floor roads and still fails on them,
+which is not explained (per-condition training success was not logged).
