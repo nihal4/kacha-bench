@@ -104,7 +104,7 @@ def record(run, out, best=False, seeds=TEST_SEEDS, check=0, noise=False):
                 a, _ = model.predict(norm.normalize_obs(obs[None]), deterministic=True)
                 obs, _, te, tr, info = env.step(a[0]); done = te or tr
             res.append(bool(info.get("is_success", False)))
-            su = env.mud_p.su / 1e3 if env.mud_p is not None else None
+            su = env.mud_summary()["su_kpa"]
             print(f"seed {sd}: {'ok' if res[-1] else 'FELL'}  su={su and round(su, 1)} kPa  dist={info.get('distance', 0):.2f}", flush=True)
             env.close()
         print(f"check: {sum(res)}/{len(res)} walked (noise={'on' if noise else 'off'})")

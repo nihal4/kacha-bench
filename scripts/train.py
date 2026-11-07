@@ -85,6 +85,9 @@ def parse():
     ap.add_argument("--speed_action", action="store_true",
                     help="g1 with --base dcm: the policy also chooses the walking speed (13th action, "
                          "0.05 to 0.20 m/s, taken up at footstep touchdown). Changes the action size: new run")
+    ap.add_argument("--arm_action", action="store_true",
+                    help="g1 with --base dcm: 6 more policy outputs move the shoulders and elbows around the DCM's arm pose "
+                         "(arms for balance). Changes the action size: new run")
     ap.add_argument("--max_seconds", type=float, default=None, metavar="S",
                     help="g1: time allowed to cross the road in training and in the automatic evaluation "
                          "(default 60 with --base dcm, 40 otherwise)")
@@ -111,6 +114,7 @@ def parse():
         if args.dr and (args.dry_share != 0.25 or list(args.depth_range) != [0.04, 0.15]):
             tags += f"-d{args.depth_range[0]:g}-{args.depth_range[1]:g}-p{args.dry_share:g}"
         tags += ("-spd" if args.speed_action else "")
+        tags += ("-arm" if args.arm_action else "")
         tags += (f"-t{args.max_seconds:g}" if args.max_seconds is not None else "")
         tags += ("-scan" if args.scan else "") + (f"-h{args.history}" if args.history > 1 else "")
         args.name = args.name or f"g1-road-{args.season}{tags}-s{args.seed}"
@@ -122,7 +126,7 @@ def parse():
 
 def make_env(season, scan, seed, reward="v2", robot="go1", assist=0.0, reference=True,
              history=1, base="scripted", road="rutted", mud=None, regen_every=20,
-             speed_action=False, max_seconds=None):
+             speed_action=False, arm_action=False, max_seconds=None):
     def _f():
         if robot == "g1":
             from kacha.g1_env import G1MudRoadEnv
@@ -133,7 +137,7 @@ def make_env(season, scan, seed, reward="v2", robot="go1", assist=0.0, reference
                                 assist=assist, reference=reference, height_scan=scan,
                                 history=history, base=base, road=ROADS[road],
                                 max_seconds=max_seconds or (60.0 if base == "dcm" else 40.0),
-                                speed_action=speed_action,
+                                speed_action=speed_action, arm_action=arm_action,
                                 mud=mud, regen_every=regen_every)
         from kacha.walk_env import Go1WalkEnv
         return Go1WalkEnv(season=season, seed=seed, height_scan=scan, reward=reward)
@@ -184,7 +188,7 @@ def main():
               "g1_reference": not args.no_reference, "g1_history": args.history,
               "g1_base": args.base if g1 else "", "g1_road": args.road if g1 else "",
               "g1_wet_start": args.wet_start if g1 else None,
-              "g1_speed_action": bool(args.speed_action and g1), "g1_max_seconds": args.max_seconds,
+              "g1_speed_action": bool(args.speed_action and g1), "g1_arm_action": bool(args.arm_action and g1), "g1_max_seconds": args.max_seconds,
               "g1_dr": bool(args.dr and g1), "g1_wet_max": args.wet_max if g1 else None,
               "g1_dr_dry_share": args.dry_share if args.dr else None,
               "g1_dr_depth_range": list(args.depth_range) if args.dr else None, **cfg}
@@ -193,7 +197,7 @@ def main():
 
     Vec = SubprocVecEnv if cfg["n_envs"] > 1 else DummyVecEnv
     g1_kw = dict(reference=not args.no_reference, history=args.history, base=args.base,
-                 road=args.road, speed_action=args.speed_action, max_seconds=args.max_seconds)
+                 road=args.road, speed_action=args.speed_action, arm_action=args.arm_action, max_seconds=args.max_seconds)
     use_assist = g1 and args.assist_frac > 0
     venv = Vec([make_env(args.season, args.scan, args.seed * 1000 + i, args.reward, args.robot,
                          assist=1.0 if use_assist else 0.0, **g1_kw) for i in range(cfg["n_envs"])])

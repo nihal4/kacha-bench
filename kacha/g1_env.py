@@ -51,6 +51,12 @@ SPEED_MIN, SPEED_MAX, SPEED_START = 0.05, 0.20, 0.15   # m/s, range the policy p
 # plates failed on it. KACHA_BARE_DRY=1 restores the old bare floor (kept as a robustness check). See docs/mud_physics.md, section 9.
 BARE_DRY = os.environ.get("KACHA_BARE_DRY", "0") == "1"
 RIGID_DEPTH = 0.04      # m of (never-yielding) layer under the plates for dry ground
+# Arms for balance (--arm_action): 6 extra policy outputs, shoulder pitch / shoulder roll / elbow of each arm, added to the
+# arm pose the DCM holds. Indices into the upper-body targets (waist 0-2, left arm 3-9, right arm 10-16); the right shoulder
+# roll is mirrored so +1 moves both arms outward. Ranges (rad) stay inside the joint limits; the robot has no self-collision.
+ARM_IDX = np.array([3, 4, 6, 10, 11, 13])
+ARM_SCALE = np.array([0.6, 0.4, 0.5, 0.6, -0.4, 0.5])
+FREEZE_ARMS = os.environ.get("KACHA_FREEZE_ARMS", "0") == "1"   # evaluation: zero the arm outputs (ablation)
 DCM_SPEED = 0.2              # m/s, the speed the DCM controller walks reliably
 DCM_SCALE = 0.5 * np.array([0.25, 0.15, 0.10, 0.25, 0.20, 0.10] * 2)   # rad, corrections
 # Failure-cause thresholds (heuristics; docs/study.md, "Failure causes"), judged over the
@@ -78,7 +84,7 @@ class G1MudRoadEnv(gym.Env):
                  max_seconds=40.0, regen_every=20, timestep=0.005, control_dt=0.02,
                  obs_noise=True, look=False, spawn_x=-4.0, goal_x=4.3, road=None,
                  assist=0.0, reference=True, height_scan=False, history=1,
-                 mud=None, base="scripted", speed_action=False, render_mode=None):
+                 mud=None, base="scripted", speed_action=False, arm_action=False, render_mode=None):
         # mud: overrides for robustness sweeps, applied on top of the season:
         #   LI (sets strength and suction together), su_kpa, depth (m), beta (suction
         #   ratio), mu (surface friction), fill (share of each hole filled with water);
@@ -90,6 +96,8 @@ class G1MudRoadEnv(gym.Env):
             raise ValueError(f"base must be 'scripted' or 'dcm', got {base!r}")
         self.base = base
         self.speed_action = bool(speed_action) and base == "dcm"   # 13th action: walking speed
+        self.arm_action = bool(arm_action) and base == "dcm"       # 6 more actions: arms
+        self._arm_corr = np.zeros(6)
         self.dcm = None
         self.assist = float(assist)
         self.reference, self.height_scan = bool(reference), bool(height_scan)
@@ -108,7 +116,7 @@ class G1MudRoadEnv(gym.Env):
         n_p = N_PROPRIO_DCM if self.base == "dcm" else N_PROPRIO
         n_obs = n_p * self.history + (len(SCAN_X) * len(SCAN_Y) if self.height_scan else 0)
         self.observation_space = gym.spaces.Box(-np.inf, np.inf, (n_obs,), np.float32)
-        self.action_space = gym.spaces.Box(-1.0, 1.0, (13 if self.speed_action else 12,), np.float32)
+        self.action_space = gym.spaces.Box(-1.0, 1.0, (12 + int(self.speed_action) + 6 * int(self.arm_action),), np.float32)
 
     # ------------------------------------------------------------------ world
     def _pick_season(self):
@@ -278,6 +286,8 @@ class G1MudRoadEnv(gym.Env):
         def fn(d, dt):
             u = self.dcm(d, dt)
             u[:12] += corr
+            if self.arm_action:
+                u[12 + ARM_IDX] += self._arm_corr
             return u
         return fn
 
@@ -286,8 +296,13 @@ class G1MudRoadEnv(gym.Env):
         ctrl_fn(data, dt) -> actuator targets; it replaces the action (model-based
         baselines such as kacha.dcm run at the physics rate)."""
         a = np.clip(np.asarray(action, dtype=np.float64), -1.0, 1.0)
-        if self.speed_action and self.dcm is not None and len(a) > 12:
-            self.dcm.v_cmd = SPEED_MIN + 0.5 * (a[12] + 1.0) * (SPEED_MAX - SPEED_MIN)
+        n = 12
+        if self.speed_action and self.dcm is not None and len(a) > n:
+            self.dcm.v_cmd = SPEED_MIN + 0.5 * (a[n] + 1.0) * (SPEED_MAX - SPEED_MIN)
+        n += int(self.speed_action)
+        if self.arm_action:
+            arm = a[n:n + 6] if len(a) >= n + 6 else np.zeros(6)
+            self._arm_corr = ARM_SCALE * (0.0 * arm if FREEZE_ARMS else arm)
         a = a[:12]
         m, d = self.model, self.data
         u = self.u_ref.copy()
@@ -617,4 +632,4 @@ def env_kwargs_from_config(cfg):
     return dict(season="dry" if season == "none" else season,
                 reference=cfg.get("g1_reference", True),
                 height_scan=cfg.get("scan", False), history=cfg.get("g1_history", 1),
-                base=cfg.get("g1_base", "scripted"), speed_action=cfg.get("g1_speed_action", False))
+                base=cfg.get("g1_base", "scripted"), speed_action=cfg.get("g1_speed_action", False), arm_action=cfg.get("g1_arm_action", False))

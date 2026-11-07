@@ -58,7 +58,9 @@ Steps, in the order proposed:
 Where the author's picture and the literature differ: Godon et al. (2025) measured suction on a Go1 foot peaking at
 intermediate wetness and vanishing in nearly liquid mud, so "wetter = stickier" holds up to slurry and then reverses.
 
-## D. Arms for balance (author) - idea, after A
+## D. Arms for balance (author) - BUILT 2026-11-07 (`--arm_action`), run pending
+
+Run: run 6's settings plus `--arm_action`, from scratch, 6M steps, `kacha job peak_monsoon 6000000 "--robot g1 --base dcm --road smooth --wet_start 0.4 --wet_max 0.85 --dr --history 5 --speed_action --arm_action --max_seconds 300 --then-evaluate"`; run 6 is the control (same settings without arms). The evaluation also takes `KACHA_FREEZE_ARMS=1` (arms zeroed) to show the effect. The text below is the plan as written before building.
 
 - Idea: on slippery ground people use their arms for balance. Today the arms are held in a fixed pose by the DCM
   (`kacha/dcm.py`, upper-body joints `u0[12:]`) and the policy only corrects the 12 leg joints, so it cannot use them.

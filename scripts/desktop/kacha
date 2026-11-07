@@ -33,6 +33,7 @@ case "${1:-help}" in
         M=$(echo "$EXTRA" | grep -oE -- '--wet_max [0-9.]+' | awk '{printf "%g", $2}')
         [ -n "$M" ] && T="$T-max$M"
         case "$EXTRA" in *--speed_action*) T="$T-spd" ;; esac
+        case "$EXTRA" in *--arm_action*) T="$T-arm" ;; esac
         TS=$(echo "$EXTRA" | grep -oE -- '--max_seconds [0-9.]+' | awk '{printf "%g", $2}')
         [ -n "$TS" ] && T="$T-t$TS"
         case "$EXTRA" in *--scan*) T="$T-scan" ;; esac
